@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "postinstall": "node scripts/postinstall.mjs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "format": "prettier . --check",
