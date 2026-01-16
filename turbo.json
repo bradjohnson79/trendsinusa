@@ -1,6 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalEnv": [
+    "DATABASE_URL",
+    "DATABASE_DIRECT_URL",
+    "OPENAI_API_KEY",
+    "PERPLEXITY_API_KEY",
+    "ADMIN_SESSION_SECRET",
+    "SITE_KEY",
+    "PRISMA_SKIP_POSTINSTALL_GENERATE"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
