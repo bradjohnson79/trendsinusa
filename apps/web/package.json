@@ -1,0 +1,33 @@
+{
+  "name": "@trendsinusa/web",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- next dev -p 3005",
+    "build": "dotenv -e ../../.env -- next build",
+    "start": "dotenv -e ../../.env -- next start -p 3005",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@trendsinusa/db": "workspace:*",
+    "@trendsinusa/shared": "workspace:*",
+    "@prisma/client": "^6.2.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.14",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "autoprefixer": "^10.4.20",
+    "dotenv-cli": "^8.0.0",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.1.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
+  }
+}
+

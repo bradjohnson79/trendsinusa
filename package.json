@@ -1,0 +1,30 @@
+{
+  "name": "trendsinusa",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "format": "prettier . --check",
+    "format:fix": "prettier . --write",
+    "docs:generate": "node scripts/generate-portfolio-docs.mjs",
+    "exit:export": "node scripts/export-exit-report.mjs",
+    "prisma:generate": "pnpm --filter @trendsinusa/db prisma:generate",
+    "prisma:migrate:deploy": "pnpm --filter @trendsinusa/db prisma:migrate:deploy",
+    "prisma:migrate:reset": "pnpm --filter @trendsinusa/db prisma:migrate:reset"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "prettier": "^3.3.3",
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.3"
+  }
+}
+

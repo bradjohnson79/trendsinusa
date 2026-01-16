@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "sites": [
+    {
+      "key": "trendsinusa",
+      "name": "Trends in USA",
+      "domain": "trendsinusa.com",
+      "enabled": true,
+      "defaultCategories": [],
+      "affiliatePriorities": ["AMAZON"],
+      "branding": {
+        "primaryColor": "#0f172a",
+        "accentColor": "#2563eb",
+        "logoUrl": null
+      },
+      "overrides": {
+        "homepageLayout": ["premium", "sponsored", "live", "trending", "banners"],
+        "heroTone": "neutral",
+        "categoryEmphasis": [],
+        "featuredPlacementRules": {
+          "premiumLimit": 3,
+          "eligibleTypes": ["SPOTLIGHT", "EDITORS_PICK", "FEATURED"],
+          "order": ["SPOTLIGHT", "EDITORS_PICK", "FEATURED"]
+        }
+      }
+    }
+  ]
+}
+

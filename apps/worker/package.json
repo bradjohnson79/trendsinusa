@@ -1,0 +1,34 @@
+{
+  "name": "@trendsinusa/worker",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "dotenv -e ../../.env -- node dist/index.js",
+    "run:hourly": "dotenv -e ../../.env -- tsx src/scheduler/hourly.ts",
+    "run:daily": "dotenv -e ../../.env -- tsx src/scheduler/daily.ts",
+    "run:amazon:products": "dotenv -e ../../.env -- tsx src/scheduler/amazonProducts.ts",
+    "run:amazon:deals": "dotenv -e ../../.env -- tsx src/scheduler/amazonDeals.ts",
+    "run:ai:hero-image": "dotenv -e ../../.env -- tsx src/scheduler/generateHeroImage.ts",
+    "run:ai:category-images": "dotenv -e ../../.env -- tsx src/scheduler/generateCategoryImages.ts",
+    "run:ai:product-enrichment": "dotenv -e ../../.env -- tsx src/scheduler/productEnrichment.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@prisma/client": "^6.2.0",
+    "@trendsinusa/db": "workspace:*",
+    "@trendsinusa/shared": "workspace:*",
+    "dotenv": "^16.4.7",
+    "sharp": "0.33.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.14",
+    "dotenv-cli": "^8.0.0",
+    "eslint": "^8.57.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,523 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_DIRECT_URL")
+}
+
+enum DealStatus {
+  ACTIVE
+  EXPIRING_24H
+  EXPIRING_6H
+  EXPIRING_1H
+  EXPIRED
+}
+
+enum AffiliateRegion {
+  US
+}
+
+enum AffiliateProvider {
+  AMAZON
+  WALMART
+  TARGET
+}
+
+enum AIRole {
+  HERO_HEADLINE_WRITER
+  DEAL_MICRO_COPY_WRITER
+  BANNER_TEXT_WRITER
+  SEO_META_GENERATOR
+  HERO_IMAGE_GENERATOR
+  CATEGORY_IMAGE_GENERATOR
+  PRODUCT_ENRICHMENT
+}
+
+enum AIActionStatus {
+  SUCCESS
+  FAILURE
+}
+
+enum UrgencyTier {
+  ONE_HOUR
+  SIX_HOUR
+  TWENTY_FOUR_HOUR
+}
+
+enum AIEntityType {
+  PRODUCT
+  DEAL
+  SEO
+  HERO
+}
+
+enum AIActionType {
+  RESEARCH
+  FINALIZE
+  SUPPRESS
+  FEATURE
+  ROTATE
+  EVALUATE
+}
+
+enum IngestionSource {
+  AMAZON_BEST_SELLER
+  AMAZON_LIGHTNING
+  AMAZON_DEAL
+  MANUAL
+}
+
+// Provider-level origin (future-proof across Amazon/Walmart/BestBuy/etc).
+enum IngestionProvider {
+  AMAZON
+  WALMART
+  TARGET
+  BEST_BUY
+}
+
+enum IngestionStatus {
+  STARTED
+  SUCCESS
+  FAILURE
+}
+
+enum AlertType {
+  DEAL_INGESTION_STALLED
+  AMAZON_DATA_ANOMALY
+  AI_COPY_FAILURE
+  AFFILIATE_ID_MISSING
+  SYSTEM
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+enum AuditActorType {
+  SYSTEM
+  ADMIN
+  AI
+}
+
+enum AuditEntityType {
+  PRODUCT
+  DEAL
+  PRICE
+  AI
+}
+
+enum AuditAction {
+  PRICE_CHANGED
+  DEAL_CREATED
+  DEAL_UPDATED
+  DEAL_EXPIRED
+  AI_REWRITE
+}
+
+enum ClickKind {
+  AFFILIATE_OUTBOUND
+}
+
+enum SystemCommandType {
+  AMAZON_PRODUCTS_REFRESH
+  AMAZON_DEALS_REFRESH
+}
+
+enum PlacementType {
+  FEATURED
+  EDITORS_PICK
+  SPOTLIGHT
+  SPONSORED
+}
+
+model Product {
+  id               String   @id @default(cuid())
+  // Identity (finalized): Amazon ASIN. For non-Amazon sources in early dev,
+  // we store a deterministic synthetic ASIN (e.g. "SEED-001") to keep identity stable.
+  asin             String   @unique
+  source           IngestionSource
+  ingestionProvider IngestionProvider @default(AMAZON)
+  externalId       String?
+  title            String
+  imageUrl         String?
+  imageUrls        String[] @default([])
+  category         String?
+  productUrl       String?
+  categoryOverride String?
+  rating           Float?
+  reviewCount      Int?
+  blocked          Boolean  @default(false)
+  tags             String[] @default([])
+  // Best-effort freshness for source/provider data (e.g. PA API). Used for fail-closed rendering.
+  sourceFetchedAt  DateTime?
+
+  // AI-owned fields (optional, auditable, override-safe)
+  aiResearchDraft     String?
+  aiFinalSummary      String?
+  aiConfidenceScore   Float?
+  aiLastGeneratedAt   DateTime?
+  aiDisabled          Boolean  @default(false)
+
+  deals            Deal[]
+  clickEvents      ClickEvent[]
+  affiliateLinks   ProductAffiliateLink[]
+  rawPayloads      ProductRawPayload[]
+  pricePoints      ProductPricePoint[]
+  enrichments      ProductAIEnrichment[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([source])
+  @@index([ingestionProvider])
+  @@index([createdAt])
+  @@index([sourceFetchedAt])
+}
+
+model AuditLog {
+  id        String         @id @default(cuid())
+  occurredAt DateTime      @default(now())
+
+  actorType AuditActorType
+  actorId   String?
+
+  entityType AuditEntityType
+  entityId   String?
+
+  action    AuditAction
+  summary   String?
+  before    Json?
+  after     Json?
+  metadata  Json?
+
+  @@index([occurredAt])
+  @@index([entityType, entityId, occurredAt])
+  @@index([action, occurredAt])
+}
+model ProductAIEnrichment {
+  id               String   @id @default(cuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  promptVersion    String
+  researchModel    String
+  finalModel       String
+
+  inputHashResearch String
+  inputHashFinal    String
+  outputHashResearch String?
+  outputHashFinal    String?
+
+  researchText     String
+  researchSources  Json?
+
+  finalSummary     String
+  finalHighlights  String[] @default([])
+  finalSources     Json?
+  confidenceScore  Float?
+
+  createdAt        DateTime @default(now())
+
+  @@unique([productId, inputHashFinal])
+  @@index([productId, createdAt])
+}
+
+model ProductPricePoint {
+  id               String            @id @default(cuid())
+  productId        String
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  provider         IngestionProvider
+  priceCents       Int
+  currency         String            @default("USD")
+
+  // True when Amazon indicates a promotion/deal (best-effort signal).
+  isPromotion      Boolean           @default(false)
+  promotionEndsAt  DateTime?
+
+  capturedAt       DateTime          @default(now())
+
+  @@index([productId, capturedAt])
+  @@index([provider, capturedAt])
+  @@index([provider, currency, capturedAt])
+}
+
+model ProductRawPayload {
+  id         String            @id @default(cuid())
+  productId  String
+  product    Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  provider   IngestionProvider
+  payload    Json
+  fetchedAt  DateTime          @default(now())
+  payloadHash String?
+
+  @@unique([productId, provider])
+  @@index([provider, fetchedAt])
+}
+
+model Deal {
+  id               String     @id @default(cuid())
+  productId        String
+  product          Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  source           IngestionSource
+  externalKey      String
+  status           DealStatus @default(ACTIVE)
+  approved         Boolean    @default(true)
+  suppressed       Boolean    @default(false)
+  discountPercent  Int?
+  currentPriceCents Int
+  oldPriceCents    Int?
+  currency         String     @default("USD")
+
+  expiresAt        DateTime
+  lastEvaluatedAt  DateTime?
+
+  // AI deal intelligence (no price edits)
+  dealPriorityScore Float?
+  urgencyTier       UrgencyTier?
+  aiSuppressed      Boolean @default(false)
+  aiFeatured        Boolean @default(false)
+  aiEvaluatedAt     DateTime?
+
+  clickEvents      ClickEvent[]
+  placements       DealPlacement[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([source, externalKey])
+  @@index([status, expiresAt])
+  @@index([approved, suppressed, expiresAt])
+  @@index([suppressed, expiresAt])
+  @@index([productId])
+}
+
+model SystemCommand {
+  id          String            @id @default(cuid())
+  type        SystemCommandType
+  siteKey     String            @default("trendsinusa")
+  requestedAt DateTime          @default(now())
+  requestedBy String?           // admin user id/email (optional)
+  processedAt DateTime?
+  status      IngestionStatus   @default(STARTED)
+  error       String?
+  metadata    Json?
+
+  @@index([type, siteKey, requestedAt])
+  @@index([status, requestedAt])
+}
+model DealPlacement {
+  id        String        @id @default(cuid())
+  dealId    String
+  deal      Deal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  type      PlacementType
+  enabled   Boolean       @default(true)
+  startsAt  DateTime      @default(now())
+  endsAt    DateTime
+
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([dealId, type])
+  @@index([type, enabled, startsAt, endsAt])
+  @@index([endsAt])
+}
+
+model AffiliateConfig {
+  id           String          @id @default(cuid())
+  siteKey      String          @default("trendsinusa")
+  region       AffiliateRegion @default(US)
+  enabled      Boolean         @default(false)
+  associateTag String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([siteKey, region])
+  @@index([siteKey, enabled])
+}
+
+model AffiliateProviderConfig {
+  id          String            @id @default(cuid())
+  siteKey     String            @default("trendsinusa")
+  provider    AffiliateProvider
+  enabled     Boolean           @default(false)
+  priority    Int               @default(100)
+  affiliateId String?
+  // Provider-specific link template or notes; kept flexible without schema churn.
+  linkTemplate String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([siteKey, provider])
+  @@index([enabled, priority])
+}
+
+model ProductAffiliateLink {
+  id        String            @id @default(cuid())
+  productId String
+  product   Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  provider  AffiliateProvider
+  url       String
+  enabled   Boolean           @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, provider])
+  @@index([provider, enabled])
+}
+
+model Banner {
+  id          String   @id @default(cuid())
+  key         String?  @unique
+  title       String?
+  text        String?
+  imageUrl    String?
+  imageSet    Json?
+  category    String?
+  enabled     Boolean  @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  source      String?  // AI / stock / manual (placeholder)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([enabled])
+  @@index([category])
+}
+
+model AutomationConfig {
+  id                 String   @id @default(cuid())
+  siteKey            String   @unique
+
+  imageGenEnabled    Boolean  @default(false)
+  heroRegenerateAt   DateTime?
+  categoryRegenerateAt DateTime?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([imageGenEnabled])
+}
+
+model HeroRotation {
+  id            String   @id @default(cuid())
+  forDate       DateTime @unique
+  headline      String
+  source        String   @default("AI") // AI / manual (placeholder)
+  promptVersion String?
+  model         String?
+
+  createdAt     DateTime @default(now())
+}
+
+model AIActionLog {
+  id            String         @id @default(cuid())
+  role          AIRole
+  status        AIActionStatus
+  startedAt     DateTime       @default(now())
+  finishedAt    DateTime?
+  outputPreview String?
+  promptVersion String?
+  model         String?
+  error         String?
+  metadata      Json?
+
+  // New structured fields for automation control plane (keep nullable for backward compatibility)
+  entityType       AIEntityType?
+  entityId         String?
+  actionType       AIActionType?
+  modelUsed        String?
+  confidenceScore  Float?
+  inputHash        String?
+  outputHash       String?
+  manualOverride   Boolean @default(false)
+
+  @@index([role, startedAt])
+  @@index([status, startedAt])
+  @@index([entityType, actionType, startedAt])
+}
+
+model IngestionRun {
+  id              String          @id @default(cuid())
+  source          IngestionSource
+  status          IngestionStatus @default(STARTED)
+  startedAt       DateTime        @default(now())
+  finishedAt      DateTime?
+  productsProcessed Int           @default(0)
+  dealsProcessed    Int           @default(0)
+  error          String?
+  metadata       Json?
+
+  @@index([source, startedAt])
+  @@index([status, startedAt])
+}
+
+model SystemAlert {
+  id         String        @id @default(cuid())
+  type       AlertType
+  severity   AlertSeverity @default(INFO)
+  message    String
+  noisy      Boolean       @default(false)
+  resolvedAt DateTime?
+
+  createdAt  DateTime @default(now())
+
+  @@index([noisy, createdAt])
+  @@index([resolvedAt])
+}
+
+model ClickEvent {
+  id         String    @id @default(cuid())
+  kind       ClickKind @default(AFFILIATE_OUTBOUND)
+  occurredAt DateTime  @default(now())
+
+  href       String
+  asin       String?
+
+  dealId     String?
+  deal       Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+
+  productId  String?
+  product    Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  // Minimal audit fields (avoid storing raw IPs for now)
+  userAgent  String?
+  referrer   String?
+
+  @@index([kind, occurredAt])
+  @@index([dealId])
+  @@index([productId])
+}
+
+model AnalyticsConfig {
+  id              String   @id @default(cuid())
+  siteKey          String   @unique
+
+  gaEnabled        Boolean  @default(false)
+  gaMeasurementId  String?
+
+  // Best-effort timestamp of the last GA-tracked event we attempted to emit (observational only).
+  lastEventAt      DateTime?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([gaEnabled])
+  @@index([lastEventAt])
+}
+
+
