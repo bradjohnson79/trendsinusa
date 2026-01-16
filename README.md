@@ -35,6 +35,16 @@ pnpm install
 pnpm prisma:generate
 ```
 
+## Vercel / CI note (Prisma)
+
+- Prisma schema lives at `packages/db/prisma/schema.prisma`
+- **Prisma Client is generated during install** (`postinstall`) via `pnpm --filter @trendsinusa/db prisma:generate`
+- **Prisma migrations are not run during Vercel builds**. Run migrations manually (or via CI) using:
+
+```bash
+pnpm prisma:migrate:deploy
+```
+
 ## Run (local)
 
 This repo uses a single **root** `.env`. Package scripts automatically load it.

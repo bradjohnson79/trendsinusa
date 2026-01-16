@@ -62,7 +62,16 @@ export type ServerEnv = z.infer<typeof serverEnvSchema>;
 export type ClientEnv = z.infer<typeof clientEnvSchema>;
 
 export function getServerEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
-  const parsed = serverEnvSchema.safeParse(env);
+  // Build-time hygiene: avoid hard-failing `next build` on missing DB env vars.
+  // Prisma Client generation and Next prerender should not require DB access.
+  // Runtime code paths that actually query the DB will still fail if DB is unreachable.
+  const withFallback: NodeJS.ProcessEnv = { ...env };
+  const isNextBuild = env.NEXT_PHASE === 'phase-production-build';
+  if (isNextBuild && !withFallback.DATABASE_URL) {
+    withFallback.DATABASE_URL = 'postgresql://user:pass@localhost:5432/postgres?schema=public';
+  }
+
+  const parsed = serverEnvSchema.safeParse(withFallback);
   if (!parsed.success) {
     throw new Error(`Invalid server environment variables:\n${formatZodError(parsed.error)}`);
   }
