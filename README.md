@@ -39,6 +39,8 @@ pnpm prisma:generate
 
 - Prisma schema lives at `packages/db/prisma/schema.prisma`
 - **Prisma Client is generated during install** (`postinstall`) via `pnpm --filter @trendsinusa/db prisma:generate`
+- To fully silence Prisma’s implicit `@prisma/client` postinstall behavior in monorepos, set:
+  - `PRISMA_SKIP_POSTINSTALL_GENERATE=true` (in Vercel env vars for Production + Preview)
 - **Prisma migrations are not run during Vercel builds**. Run migrations manually (or via CI) using:
 
 ```bash

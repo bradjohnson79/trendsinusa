@@ -61,21 +61,35 @@ const clientEnvSchema = z.object({
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
 export type ClientEnv = z.infer<typeof clientEnvSchema>;
 
-export function getServerEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
-  // Build-time hygiene: avoid hard-failing `next build` on missing DB env vars.
-  // Prisma Client generation and Next prerender should not require DB access.
-  // Runtime code paths that actually query the DB will still fail if DB is unreachable.
+function isNextBuildPhase(env: NodeJS.ProcessEnv): boolean {
+  return env.NEXT_PHASE === 'phase-production-build';
+}
+
+export function getBuildEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
+  // Build-time must not require runtime secrets (DB, AI, admin auth). We provide safe placeholders.
   const withFallback: NodeJS.ProcessEnv = { ...env };
-  const isNextBuild = env.NEXT_PHASE === 'phase-production-build';
-  if (isNextBuild && !withFallback.DATABASE_URL) {
+  if (!withFallback.DATABASE_URL) {
     withFallback.DATABASE_URL = 'postgresql://user:pass@localhost:5432/postgres?schema=public';
   }
-
   const parsed = serverEnvSchema.safeParse(withFallback);
   if (!parsed.success) {
     throw new Error(`Invalid server environment variables:\n${formatZodError(parsed.error)}`);
   }
   return parsed.data;
+}
+
+export function getRuntimeEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
+  const parsed = serverEnvSchema.safeParse(env);
+  if (!parsed.success) {
+    throw new Error(`Invalid server environment variables:\n${formatZodError(parsed.error)}`);
+  }
+  return parsed.data;
+}
+
+// Back-compat: most of the codebase calls `getServerEnv()`.
+// During `next build`, we intentionally relax runtime-secret requirements.
+export function getServerEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
+  return isNextBuildPhase(env) ? getBuildEnv(env) : getRuntimeEnv(env);
 }
 
 export function getClientEnv(env: NodeJS.ProcessEnv = process.env): ClientEnv {

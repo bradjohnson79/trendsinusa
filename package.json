@@ -27,9 +27,5 @@
     "turbo": "^2.4.0",
     "typescript": "^5.7.3"
   }
-  ,
-  "prisma": {
-    "schema": "packages/db/prisma/schema.prisma"
-  }
 }
 
