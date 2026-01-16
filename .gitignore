@@ -4,9 +4,17 @@ node_modules
 dist
 .DS_Store
 
+# Env files (never commit)
 .env
+.env.*
 .env.local
 .env.*.local
+.env.example
+**/.env
+**/.env.*
+**/.env.local
+**/.env.*.local
+**/.env.example
 
 pnpm-debug.log*
 npm-debug.log*
