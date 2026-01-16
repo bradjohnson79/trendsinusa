@@ -1,9 +1,6 @@
-import type { NextConfig } from 'next';
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   reactStrictMode: true,
-  // Workspace packages are compiled to `dist/` by their `dev` scripts (tsc --watch),
-  // so Next can treat them like normal dependencies (no TS/relative-import edge cases).
   transpilePackages: ['@trendsinusa/shared', '@trendsinusa/db'],
   images: {
     // Retailer-provided images come from various hosts (Amazon CDN, etc). We allow HTTPS remote images.
