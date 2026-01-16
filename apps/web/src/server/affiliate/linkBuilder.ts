@@ -4,7 +4,6 @@ import { cache } from 'react';
 import type { AffiliateProvider } from '@prisma/client';
 
 import { prisma } from '@/src/server/prisma';
-import { applyAmazonTag, buildAmazonUrl, applyTemplate } from './providers';
 import { getCurrentSite } from '@/src/server/site';
 
 const getAffiliateConfigUSCached = cache(async (siteKey: string) => {

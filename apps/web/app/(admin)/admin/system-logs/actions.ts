@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { getServerEnv } from '@trendsinusa/shared';
 import { prisma } from '@/src/server/prisma';
+import type { Prisma } from '@prisma/client';
 
 async function getAdminSelectedSiteKey(): Promise<string> {
   const env = getServerEnv();
@@ -25,7 +26,12 @@ export async function requestAmazonProductsRefresh() {
   const siteKey = await getAdminSelectedSiteKey();
   await rateLimitCommand(siteKey, 'AMAZON_PRODUCTS_REFRESH');
   await prisma.systemCommand.create({
-    data: { siteKey, type: 'AMAZON_PRODUCTS_REFRESH', status: 'STARTED', metadata: { requestedBy: 'admin' } as any },
+    data: {
+      siteKey,
+      type: 'AMAZON_PRODUCTS_REFRESH',
+      status: 'STARTED',
+      metadata: { requestedBy: 'admin' } satisfies Prisma.InputJsonValue,
+    },
   });
   revalidatePath('/admin/system-logs');
 }
@@ -34,7 +40,12 @@ export async function requestAmazonDealsRefresh() {
   const siteKey = await getAdminSelectedSiteKey();
   await rateLimitCommand(siteKey, 'AMAZON_DEALS_REFRESH');
   await prisma.systemCommand.create({
-    data: { siteKey, type: 'AMAZON_DEALS_REFRESH', status: 'STARTED', metadata: { requestedBy: 'admin' } as any },
+    data: {
+      siteKey,
+      type: 'AMAZON_DEALS_REFRESH',
+      status: 'STARTED',
+      metadata: { requestedBy: 'admin' } satisfies Prisma.InputJsonValue,
+    },
   });
   revalidatePath('/admin/system-logs');
 }

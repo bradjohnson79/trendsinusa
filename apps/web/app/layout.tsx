@@ -14,13 +14,12 @@ export const metadata = {
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const siteKey = await getResolvedSiteKey();
   const ga = await getGaConfigForSite(siteKey);
-  const site = await getCurrentSite();
-  const title = site?.name ?? 'Trends';
+  void (await getCurrentSite()); // keep call for future branding wiring; avoids unused var lint
   return (
     <html lang="en">
       <body className="min-h-dvh bg-slate-50 text-slate-900 antialiased">
         <GoogleAnalytics enabled={ga.enabled} measurementId={ga.measurementId} />
-        <SiteHeader title={title} />
+        <SiteHeader />
         {children}
       </body>
     </html>

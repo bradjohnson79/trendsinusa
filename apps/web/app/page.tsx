@@ -118,7 +118,7 @@ export default async function HomePage() {
                 <ProviderBadge provider={heroProvider} />
                 <span className="text-slate-500">•</span>
                 <span className="font-medium">Featured deal ends in</span>
-                <CountdownTimer expiresAtMs={new Date(heroDeal.expiresAt as any).getTime()} />
+                <CountdownTimer expiresAtMs={heroDeal.expiresAt.getTime()} />
               </div>
             ) : null}
           </div>

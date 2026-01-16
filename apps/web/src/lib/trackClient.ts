@@ -1,5 +1,11 @@
 'use client';
 
+declare global {
+  // GA4 global; may be absent when GA is disabled.
+  // eslint-disable-next-line no-var
+  var gtag: undefined | ((...args: unknown[]) => void);
+}
+
 export type TrackPayload = {
   event:
     | 'page_view'
@@ -35,8 +41,7 @@ export function trackClient(payload: TrackPayload) {
   }
 
   // Optional GA4 fan-out (observational only). If GA isn't enabled, `gtag` won't exist.
-  const gtag = (globalThis as any).gtag as undefined | ((...args: any[]) => void);
-  if (!gtag) return;
+  if (!globalThis.gtag) return;
 
   if (
     payload.event === 'page_view' ||
@@ -44,7 +49,7 @@ export function trackClient(payload: TrackPayload) {
     payload.event === 'view_deal' ||
     payload.event === 'outbound_affiliate_click'
   ) {
-    gtag('event', payload.event, {
+    globalThis.gtag('event', payload.event, {
       section: payload.section,
       asin: payload.asin,
       deal_id: payload.dealId,

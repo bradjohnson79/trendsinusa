@@ -36,7 +36,7 @@ export async function generateMetadata(props: { params: Promise<{ id: string }> 
   if (!deal) return { title: 'Not found', robots: { index: false, follow: false } };
 
   const name = site?.name ?? 'Trends';
-  const expiresIso = new Date(deal.expiresAt as any).toISOString();
+  const expiresIso = deal.expiresAt.toISOString();
   return buildSeoMeta({
     title: `${deal.product.title} — Deal — ${name}`,
     description: `Live deal on ${deal.product.title}. Expires ${expiresIso}.`,

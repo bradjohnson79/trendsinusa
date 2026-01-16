@@ -53,7 +53,7 @@ const serverEnvSchema = z.object({
 });
 
 const clientEnvSchema = z.object({
-  NEXT_PUBLIC_SITE_URL: z.string().url(),
+  NEXT_PUBLIC_SITE_URL: z.preprocess(emptyToUndefined, z.string().url().default('http://localhost:3005')),
   NEXT_PUBLIC_SITE_KEY: z.string().default('trendsinusa'),
   NEXT_PUBLIC_APP_ENV: z.enum(['development', 'staging', 'production']).default('development'),
 });
@@ -70,7 +70,16 @@ export function getServerEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
 }
 
 export function getClientEnv(env: NodeJS.ProcessEnv = process.env): ClientEnv {
-  const parsed = clientEnvSchema.safeParse(env);
+  // Vercel convenience: if NEXT_PUBLIC_SITE_URL is not set, fall back to VERCEL_URL.
+  // This keeps build-time routes (robots/sitemap) from failing closed on a missing env var,
+  // while still requiring a valid URL overall.
+  const withFallback: NodeJS.ProcessEnv = { ...env };
+  if (!withFallback.NEXT_PUBLIC_SITE_URL) {
+    const vercelUrl = env.VERCEL_URL;
+    if (vercelUrl) withFallback.NEXT_PUBLIC_SITE_URL = `https://${vercelUrl}`;
+  }
+
+  const parsed = clientEnvSchema.safeParse(withFallback);
   if (!parsed.success) {
     throw new Error(`Invalid client environment variables:\n${formatZodError(parsed.error)}`);
   }

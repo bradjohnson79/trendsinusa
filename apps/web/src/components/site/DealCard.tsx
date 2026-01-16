@@ -73,7 +73,7 @@ export function DealCard(props: {
         <div className="flex flex-wrap items-center gap-2">
           <ProviderBadge provider={props.provider} />
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${urgencyTone(d.status)}`}>
-            <CountdownTimer expiresAtMs={new Date(d.expiresAt as any).getTime()} labelPrefix="Ends in" />
+            <CountdownTimer expiresAtMs={d.expiresAt.getTime()} labelPrefix="Ends in" />
           </span>
           {pct != null && (
             <div className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
