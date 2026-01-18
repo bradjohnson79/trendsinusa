@@ -1,8 +1,7 @@
 {
-  "buildCommand": "pnpm --filter @trendsinusa/shared build && pnpm --filter @trendsinusa/db prisma:generate && pnpm --filter @trendsinusa/api build && pnpm --filter @trendsinusa/web build && pnpm check:boundaries && pnpm check:web-env",
+  "buildCommand": "pnpm --filter @trendsinusa/web build && pnpm check:boundaries && pnpm check:web-env",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/admin/:path*", "destination": "/index.html" },
     { "source": "/:path*", "destination": "/index.html" }
   ]
