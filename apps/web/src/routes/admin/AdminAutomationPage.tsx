@@ -3,6 +3,22 @@ import { useEffect, useState } from 'react';
 import type { AdminAiDiagnosticsResponse, AdminAutomationDashboardResponse, AdminDalleDiagnosticsResponse } from '@trendsinusa/shared/api';
 import { api, ApiClientError } from '@/lib/api';
 
+function fmtPacific(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(d);
+}
+
 export function AdminAutomationPage() {
   const [data, setData] = useState<AdminAutomationDashboardResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -269,6 +285,7 @@ export function AdminAutomationPage() {
               <div className="text-xs text-slate-500">
                 Schedules are explicit and fail-closed. Jobs enqueue SystemCommand records and will not run if required gates are not satisfied.
               </div>
+              <div className="text-xs text-slate-500">Timestamps displayed in America/Los_Angeles (Pacific Time).</div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="text-xs text-slate-500">
@@ -356,8 +373,8 @@ export function AdminAutomationPage() {
                               <option value="0 0 * * *">Daily</option>
                             </select>
                           </td>
-                          <td className="py-2 pr-4 font-mono text-xs">{s.lastScheduledAt ?? '—'}</td>
-                          <td className="py-2 pr-4 font-mono text-xs">{s.nextRunAt ?? '—'}</td>
+                          <td className="py-2 pr-4 font-mono text-xs">{fmtPacific(s.lastScheduledAt)}</td>
+                          <td className="py-2 pr-4 font-mono text-xs">{fmtPacific(s.nextRunAt)}</td>
                           <td className="py-2 pr-4 font-mono text-xs">{s.status}</td>
                           <td className="py-2 pr-4">
                             <button
