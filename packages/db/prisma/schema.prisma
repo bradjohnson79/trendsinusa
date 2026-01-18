@@ -171,6 +171,7 @@ enum LinkStatus {
 
 enum HeroImageSource {
   ai
+  procedural
   placeholder
 }
 
@@ -275,9 +276,11 @@ model UnaffiliatedPost {
   thumbnailUrl String?
   thumbnailGeneratedAt DateTime?
   thumbnailSource String?
+  thumbnailInputHash String?
   heroImageUrl String?
   heroImageGeneratedAt DateTime?
   heroImageSource HeroImageSource @default(placeholder)
+  heroImageInputHash String?
   linkStatus LinkStatus @default(UNKNOWN)
   lastCheckedAt DateTime?
   source     UnaffiliatedPostSource
@@ -724,6 +727,7 @@ model DiscoveryCandidate {
   thumbnailUrl String?
   thumbnailGeneratedAt DateTime?
   thumbnailSource String?
+  thumbnailInputHash String?
   linkStatus LinkStatus @default(UNKNOWN)
   lastCheckedAt DateTime?
   // Best-effort publish timestamp from the source context (if available).

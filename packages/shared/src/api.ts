@@ -117,10 +117,10 @@ export const UnaffiliatedPostPublicSchema = z.object({
   shortDescription: z.string().nullable().optional(),
   thumbnailUrl: z.string().nullable().optional(),
   thumbnailGeneratedAt: z.string().nullable().optional(),
-  thumbnailSource: z.enum(['ai', 'fallback']).nullable().optional(),
+  thumbnailSource: z.enum(['procedural', 'fallback', 'ai']).nullable().optional(),
   heroImageUrl: z.string().nullable().optional(),
   heroImageGeneratedAt: z.string().nullable().optional(),
-  heroImageSource: z.enum(['ai', 'placeholder']).nullable().optional(),
+  heroImageSource: z.enum(['procedural', 'ai', 'placeholder']).nullable().optional(),
   linkStatus: z.enum(['ACTIVE', 'DEAD', 'UNKNOWN']).optional(),
   lastCheckedAt: z.string().nullable().optional(),
   body: z.string().optional(), // only present on detail

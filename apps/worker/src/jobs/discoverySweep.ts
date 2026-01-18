@@ -2,9 +2,8 @@ import { prisma } from '@trendsinusa/db';
 import { getServerEnv } from '@trendsinusa/shared';
 import { getSiteByKey } from '@trendsinusa/shared/server';
 
-import { generateShortText } from '../ai/openai.js';
 import { perplexityResearch } from '../ai/perplexity.js';
-import { generateShortDescription, generateThumbnailDataUrl, verifyLink } from '../enrichment/postEnrichment.js';
+import { generateShortDescription, generateThumbnailDataUrl, scoreConfidenceNano } from '../enrichment/postEnrichment.js';
 import { ensurePostingItemForDiscovery } from '../posting/lifecycle.js';
 import { verifyOutboundLink } from '../enrichment/postEnrichment.js';
 import { getTodayUTC } from '../utils/time.js';
@@ -12,7 +11,7 @@ import { getTodayUTC } from '../utils/time.js';
 const PROMPT_VERSION = 'discovery-sweep-v1';
 
 type Retailer = 'AMAZON' | 'WALMART' | 'TARGET' | 'BEST_BUY';
-type Source = 'PERPLEXITY' | 'OPENAI' | 'MIXED';
+type Source = 'PERPLEXITY' | 'MIXED';
 
 type NormalizedCandidate = {
   title: string;
@@ -33,56 +32,6 @@ function normalizeTitleKey(s: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
-}
-
-function parseJsonArray<T>(raw: string): T[] {
-  const start = raw.indexOf('[');
-  const end = raw.lastIndexOf(']');
-  const json = start !== -1 && end !== -1 ? raw.slice(start, end + 1) : raw;
-  const parsed = JSON.parse(json) as unknown;
-  if (!Array.isArray(parsed)) throw new Error('Expected JSON array');
-  return parsed as T[];
-}
-
-function clampConfidence(x: unknown): number | null {
-  const n = Number(x);
-  if (!Number.isFinite(n)) return null;
-  return Math.max(0, Math.min(1, n));
-}
-
-function validateCandidate(x: any, categoryHint: string): NormalizedCandidate | null {
-  const title = normalizeWhitespace(String(x?.title ?? ''));
-  if (!title) return null;
-
-  const outboundUrl = String(x?.outboundUrl ?? x?.url ?? '').trim();
-  if (!/^https?:\/\//i.test(outboundUrl)) return null;
-
-  const description = x?.description != null ? normalizeWhitespace(String(x.description)) : null;
-  const imageQuery = x?.imageQuery != null ? normalizeWhitespace(String(x.imageQuery)) : null;
-
-  const categoryRaw = x?.category != null ? normalizeWhitespace(String(x.category)) : '';
-  const category = categoryRaw ? categoryRaw : categoryHint;
-
-  const confidenceScore = clampConfidence(x?.confidenceScore);
-
-  const spaRaw = x?.sourcePublishedAt != null ? String(x.sourcePublishedAt).trim() : '';
-  const sourcePublishedAt = spaRaw ? spaRaw : null;
-
-  // Hard guardrails: discovery layer must not carry prices or affiliate fields.
-  // (We can't fully “prove” absence in arbitrary strings, but we at least reject obvious currency markers.)
-  const joined = `${title} ${description ?? ''}`.toLowerCase();
-  if (joined.includes('$') || joined.includes('usd') || joined.includes('price')) return null;
-  if (joined.includes('affiliate') || joined.includes('promo code') || joined.includes('coupon')) return null;
-
-  return {
-    title,
-    category: category || null,
-    description: description || null,
-    imageQuery: imageQuery || null,
-    outboundUrl,
-    confidenceScore,
-    sourcePublishedAt,
-  };
 }
 
 function retailerLabel(r: Retailer) {
@@ -152,7 +101,7 @@ export async function runDiscoverySweep(params: { siteKey?: string } = {}) {
   }
 
   const perplexityModel = env.AI_RESEARCH_MODEL; // uses the same env shape as other research flows
-  const openaiModel = env.AI_FINAL_MODEL;
+  // Permanent policy: nano-only short outputs; no OpenAI normalization of discovery results.
 
   const created: string[] = [];
   const updated: string[] = [];
@@ -200,64 +149,39 @@ Format: plain text list is fine.`;
         continue;
       }
 
-      // 2) Normalize via OpenAI (strict JSON)
-      const normalizeUser = `Normalize the following discovery research into a JSON array of 0..10 candidates.
+      // 2) Parse best-effort candidates from Perplexity output (no OpenAI normalization).
+      // We accept any line containing a URL; title is the surrounding text.
+      const urlRe = new RegExp('https?://[^\\\\s)\\\\]]+', 'g');
+      const lines = String(research || '')
+        .split(/\\r?\\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
 
-Context:
-- Retailer: ${retailer}
-- Category: ${category}
-
-Rules:
-- Do NOT include prices, discounts, deal claims, or affiliate language.
-- Do NOT include ASIN/SKU requirements.
-- outboundUrl must be a plain https URL if present; otherwise omit the item.
-- Keep title short and normalized (no emojis, no promo words).
-- confidenceScore must be 0..1 (use null if uncertain).
-
-Return JSON only (no markdown), shape:
-[
-  {
-    \"title\": string,
-    \"category\": string,
-    \"description\": string|null,
-    \"imageQuery\": string|null,
-    \"outboundUrl\": string,
-    \"confidenceScore\": number|null
-  }
-]
-
-Research:
-${research}`;
-
-      let normalizedRaw = '';
-      try {
-        normalizedRaw = await generateShortText({
-          model: openaiModel,
-          system:
-            'You are a strict JSON normalizer for discovery candidates. Return only valid JSON. Do not fabricate prices or deals. Do not include affiliate tracking.',
-          user: normalizeUser,
-          temperature: 0,
-          maxOutputTokens: 900,
-        });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        errors.push(`openai_normalize_failed:${retailer}:${category}:${msg}`);
-        continue;
-      }
-
-      let normalized: any[] = [];
-      try {
-        normalized = parseJsonArray<any>(normalizedRaw);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        errors.push(`openai_json_parse_failed:${retailer}:${category}:${msg}`);
-        continue;
-      }
-
-      for (const item of normalized) {
+      for (const line of lines) {
         if (perRetailerCandidates.length >= limitPerRetailer) break;
-        const v = validateCandidate(item, category);
-        if (!v) continue;
+        const urls = [...line.matchAll(urlRe)].map((m) => m[1]).filter(Boolean);
+        if (!urls.length) continue;
+
+        const title = (normalizeWhitespace(line.replace(urlRe, '').replace(/^[-*•]+\\s*/, '').trim()) || urls[0] || '').trim();
+        if (!title) continue;
+        const joined = title.toLowerCase();
+        if (joined.includes('$') || joined.includes('usd') || joined.includes('price')) continue;
+        if (joined.includes('affiliate') || joined.includes('promo code') || joined.includes('coupon')) continue;
+
+        const outboundUrl = urls[0] ?? '';
+        if (!outboundUrl) continue;
+        if (!(outboundUrl.startsWith('http://') || outboundUrl.startsWith('https://'))) continue;
+
+        const v: NormalizedCandidate = {
+          title,
+          category: category ?? null,
+          description: null,
+          imageQuery: title,
+          outboundUrl,
+          confidenceScore: null,
+          sourcePublishedAt: null,
+        };
+
         const key = normalizeTitleKey(v.title);
         if (!key) continue;
         if (existingByKey.has(key)) continue;
@@ -283,6 +207,11 @@ ${research}`;
         continue;
       }
 
+      const categoryKey = c.category ?? 'General';
+      const confidenceScore = (await scoreConfidenceNano({ title: c.title, category: categoryKey, retailer: String(retailer) })) ?? null;
+      const shortDescription = await generateShortDescription({ title: c.title, category: categoryKey, retailer: String(retailer) });
+      const thumb = await generateThumbnailDataUrl({ title: c.title, category: categoryKey, confidenceScore });
+
       const fs = freshnessScoreFrom(spa);
 
       const key = normalizeTitleKey(c.title);
@@ -296,11 +225,16 @@ ${research}`;
             description: c.description,
             imageQuery: c.imageQuery,
             outboundUrl: c.outboundUrl,
-            confidenceScore: c.confidenceScore,
+            confidenceScore,
             sourcePublishedAt: spa,
             freshnessScore: fs,
             isFresh: true,
-            linkStatus: 'ACTIVE' as any,
+            shortDescription: shortDescription ?? null,
+            thumbnailUrl: thumb.url,
+            thumbnailGeneratedAt: now,
+            thumbnailSource: thumb.source,
+            thumbnailInputHash: thumb.inputHash,
+            linkStatus: v.status as any,
             lastCheckedAt: now,
             source: 'MIXED' as Source as any,
             status: 'ACTIVE' as any,
@@ -324,7 +258,7 @@ ${research}`;
           retailer: retailer as any,
           discoveredAt: now,
           category: c.category ?? null,
-          confidenceScore: c.confidenceScore ?? null,
+          confidenceScore,
         }).catch(() => null);
       } else {
         const row = await prisma.discoveryCandidate.create({
@@ -335,11 +269,16 @@ ${research}`;
             description: c.description,
             imageQuery: c.imageQuery,
             outboundUrl: c.outboundUrl,
-            confidenceScore: c.confidenceScore,
+            confidenceScore,
             sourcePublishedAt: spa,
             freshnessScore: fs,
             isFresh: true,
-            linkStatus: 'ACTIVE' as any,
+            shortDescription: shortDescription ?? null,
+            thumbnailUrl: thumb.url,
+            thumbnailGeneratedAt: now,
+            thumbnailSource: thumb.source,
+            thumbnailInputHash: thumb.inputHash,
+            linkStatus: v.status as any,
             lastCheckedAt: now,
             source: 'MIXED' as Source as any,
             status: 'ACTIVE' as any,
@@ -355,7 +294,7 @@ ${research}`;
           retailer: retailer as any,
           discoveredAt: now,
           category: c.category ?? null,
-          confidenceScore: c.confidenceScore ?? null,
+          confidenceScore,
         }).catch(() => null);
       }
     }
@@ -368,9 +307,9 @@ ${research}`;
   });
 
   // 5) Best-effort enrichment (non-blocking callers; bounded work)
-  // - shortDescription (1 sentence, max 20 words)
-  // - thumbnailUrl (150x150, AI attempt with fallback)
-  // - linkStatus (HEAD/GET with timeout)
+  // - shortDescription (1 sentence, max 20 words; gpt-4.1-nano)
+  // - thumbnailUrl (150x150; procedural SVG + Sharp)
+  // - linkStatus (HTTP + nano edge-case)
   const idsToEnrich = Array.from(new Set([...created, ...updated])).slice(0, 30);
   const backfill = await prisma.discoveryCandidate
     .findMany({
@@ -398,8 +337,10 @@ ${research}`;
             category: true,
             description: true,
             outboundUrl: true,
+            confidenceScore: true,
             shortDescription: true,
             thumbnailUrl: true,
+            thumbnailInputHash: true,
             linkStatus: true,
             lastCheckedAt: true,
           },
@@ -424,14 +365,15 @@ ${research}`;
       }
 
       if (!row.thumbnailUrl) {
-        const t = await generateThumbnailDataUrl({ title: row.title, category: row.category ?? null });
+        const t = await generateThumbnailDataUrl({ title: row.title, category: row.category ?? null, confidenceScore: row.confidenceScore ?? null });
         patch.thumbnailUrl = t.url;
         patch.thumbnailGeneratedAt = new Date();
         patch.thumbnailSource = t.source;
+        patch.thumbnailInputHash = t.inputHash;
       }
 
       if (row.linkStatus === 'UNKNOWN' && !row.lastCheckedAt) {
-        const r = await verifyLink(row.outboundUrl);
+        const r = await verifyOutboundLink(row.outboundUrl);
         patch.linkStatus = r.status;
         patch.lastCheckedAt = new Date();
       }
@@ -464,7 +406,7 @@ ${research}`;
     updated,
     expired: expired.count,
     errors,
-    meta: { promptVersion: PROMPT_VERSION, retailers, categories, limitPerRetailer, models: { perplexity: perplexityModel, openai: openaiModel } },
+    meta: { promptVersion: PROMPT_VERSION, retailers, categories, limitPerRetailer, models: { perplexity: perplexityModel } },
   };
 }
 

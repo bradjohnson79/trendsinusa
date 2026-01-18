@@ -1,11 +1,10 @@
 import { prisma } from '@trendsinusa/db';
 import type { DiscoveryCandidateRetailer } from '@prisma/client';
-import { generateShortText } from '../ai/openai.js';
 import {
-  deriveHeroContextFromPost,
   generateHeroImageDataUrl,
   generateShortDescription,
   generateThumbnailDataUrl,
+  generateWhyTrending,
   verifyLink,
   verifyOutboundLink,
 } from '../enrichment/postEnrichment.js';
@@ -94,6 +93,12 @@ function parseJsonObject<T>(raw: string): T {
   return JSON.parse(json) as T;
 }
 
+function buildTemplatedBody(params: { shortDescription: string | null; whyTrending: string | null; outboundUrl: string }) {
+  const what = params.shortDescription ? params.shortDescription : 'A currently trending product listing.';
+  const why = params.whyTrending ? params.whyTrending : 'This item appears to be trending based on recent activity signals.';
+  return `## What it is\n\n${what}\n\n## Why it’s trending\n\n${why}\n\n## Common use cases\n\n- Everyday use\n- Home and work\n\n## Things to consider\n\n- Availability can change quickly\n- Specs and variants may differ\n\nView on retailer site: ${params.outboundUrl}`;
+}
+
 async function uniqueSlug(base: string): Promise<string> {
   const root = safeSlug(base) || 'post';
   let slug = root;
@@ -149,9 +154,16 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
         discoveryCandidateId: true,
         shortDescription: true,
         thumbnailUrl: true,
+        thumbnailInputHash: true,
         linkStatus: true,
         lastCheckedAt: true,
         heroImageUrl: true,
+        heroImageInputHash: true,
+        heroImageGeneratedAt: true,
+        heroImageSource: true,
+        discoveredAt: true,
+        freshnessWindowHours: true,
+        expiresAt: true,
       },
     })
     .catch(() => [] as any[]);
@@ -165,42 +177,24 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
         if (ai) patch.shortDescription = ai;
       }
       if (!p.thumbnailUrl) {
-        const t = await generateThumbnailDataUrl({ title: p.title, category: p.category ?? null });
+        const c = p.discoveryCandidateId
+          ? await prisma.discoveryCandidate.findUnique({ where: { id: p.discoveryCandidateId }, select: { confidenceScore: true } }).catch(() => null)
+          : null;
+        const t = await generateThumbnailDataUrl({ title: p.title, category: p.category ?? null, confidenceScore: c?.confidenceScore ?? null });
         patch.thumbnailUrl = t.url;
         patch.thumbnailGeneratedAt = new Date();
         patch.thumbnailSource = t.source;
+        patch.thumbnailInputHash = t.inputHash;
       }
       if (!p.heroImageUrl) {
-        const minRaw = Number(process.env.HERO_IMAGE_MIN_CONFIDENCE ?? 0.75);
-        const min = Number.isFinite(minRaw) ? Math.max(0, Math.min(1, minRaw)) : 0.75;
-        let okByConfidence = min <= 0;
-        if (!okByConfidence) {
-          const c = p.discoveryCandidateId
-            ? await prisma.discoveryCandidate.findUnique({ where: { id: p.discoveryCandidateId }, select: { confidenceScore: true } }).catch(() => null)
-            : null;
-          const score = c?.confidenceScore ?? null;
-          okByConfidence = score != null && score >= min;
-        }
-        if (okByConfidence) {
-          const context = deriveHeroContextFromPost({ body: p.body ?? '', summary: p.summary ?? '', shortDescription: p.shortDescription ?? null });
-          const hero = await generateHeroImageDataUrl({ title: p.title, category: p.category ?? null, context });
-          if (hero?.url) {
-            patch.heroImageUrl = hero.url;
-            patch.heroImageGeneratedAt = new Date();
-            patch.heroImageSource = hero.source;
-          } else {
-            await prisma.systemAlert
-              .create({
-                data: {
-                  type: 'SYSTEM',
-                  severity: 'WARNING',
-                  noisy: false,
-                  message: `[hero-image] post=${p.id} generation failed (kept placeholder)`,
-                },
-              })
-              .catch(() => null);
-          }
-        }
+        const c = p.discoveryCandidateId
+          ? await prisma.discoveryCandidate.findUnique({ where: { id: p.discoveryCandidateId }, select: { confidenceScore: true } }).catch(() => null)
+          : null;
+        const hero = await generateHeroImageDataUrl({ title: p.title, category: p.category ?? null, confidenceScore: c?.confidenceScore ?? null });
+        patch.heroImageUrl = hero.url;
+        patch.heroImageGeneratedAt = new Date();
+        patch.heroImageSource = hero.source;
+        patch.heroImageInputHash = hero.inputHash;
       }
       if (!p.expiresAt) {
         const win = freshnessWindowHoursForRetailer(p.retailer as DiscoveryCandidateRetailer);
@@ -283,11 +277,11 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
         (c.description ? c.description.split(/[.!?]\s/)[0]?.trim().split(/\s+/).slice(0, 20).join(' ') : null) ??
         (await generateShortDescription({ title: c.title, category, retailer: String(retailer) }));
 
-      // Best-effort thumbnail; prefer cached candidate thumbnail, otherwise generate now.
-      const thumb: { url: string; source: 'ai' | 'fallback' } =
+      // Procedural-only thumbnail (150x150). Prefer cached, otherwise generate now.
+      const thumb =
         c.thumbnailUrl != null
-          ? { url: c.thumbnailUrl, source: c.thumbnailSource === 'ai' ? 'ai' : 'fallback' }
-          : await generateThumbnailDataUrl({ title: c.title, category: c.category ?? null });
+          ? { url: c.thumbnailUrl, source: (c.thumbnailSource ?? 'procedural') as any, inputHash: (c as any).thumbnailInputHash ?? null }
+          : await generateThumbnailDataUrl({ title: c.title, category: c.category ?? null, confidenceScore: c.confidenceScore ?? null });
 
       // Best-effort link verification (must not block publishing). Only check if never checked.
       const link =
@@ -295,41 +289,13 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
           ? await verifyLink(c.outboundUrl)
           : { status: c.linkStatus as any, httpStatus: null as number | null };
 
-      const system = `You write neutral, informational posts about trending products.
-Rules:
-- No sales language, no hype, no superlatives
-- No pricing, no discounts, no deal claims
-- No affiliate mentions, no commission mentions
-- No calls-to-action beyond: \"View on retailer site\"
-- Must not imply endorsement (do not recommend, do not call it a \"top pick\")
-- Output MUST be valid JSON with keys: title, summary, body
-- body MUST be markdown with EXACTLY these sections, using markdown headings:
-  - \"## What it is\"
-  - \"## Why it’s trending\"
-  - \"## Common use cases\"
-  - \"## Things to consider\"
-- body MUST end with a single final line: \"View on retailer site: {outboundUrl}\"`;
+      const title = String(c.title ?? '').trim();
+      const summary = String(shortDescription ?? c.description ?? '').trim();
+      if (!title || !summary) throw new Error('missing_minimum_fields');
 
-      const user = `Write an unaffiliated informational post from this discovery candidate.
+      const whyTrending = await generateWhyTrending({ title, category, retailer: String(retailer) });
+      const body = buildTemplatedBody({ shortDescription: shortDescription ?? null, whyTrending, outboundUrl: c.outboundUrl });
 
-Candidate:
-- retailer: ${retailer}
-- title: ${c.title}
-- category: ${category}
-- discoveredAt: ${c.discoveredAt.toISOString()}
-- outboundUrl: ${c.outboundUrl}
-- notes: ${c.description ?? '(none)'}
-
-Keep it short and SEO-safe.`;
-
-      const raw = await generateShortText({ model: process.env.AI_FINAL_MODEL || 'gpt-4.1', system, user, temperature: 0.2, maxOutputTokens: 900 });
-      const parsed = parseJsonObject<PostJson>(raw);
-
-      const title = String(parsed.title ?? '').trim();
-      const summary = String(parsed.summary ?? '').trim();
-      const body = String(parsed.body ?? '').trim();
-
-      if (!title || !summary || !body) throw new Error('invalid_ai_output');
       const full = `${title}\n${summary}\n${body}`;
       if (containsProhibitedLanguage(full)) throw new Error('prohibited_language_detected');
       if (impliesEndorsement(full)) throw new Error('endorsement_detected');
@@ -337,6 +303,8 @@ Keep it short and SEO-safe.`;
       if (!body.includes(c.outboundUrl)) throw new Error('missing_outbound_url_line');
 
       const slug = await uniqueSlug(title);
+
+      const hero = await generateHeroImageDataUrl({ title, category: c.category ?? null, confidenceScore: c.confidenceScore ?? null });
 
       // Atomic, idempotent conversion:
       // - create image intent (non-blocking)
@@ -366,6 +334,11 @@ Keep it short and SEO-safe.`;
             thumbnailUrl: thumb.url,
             thumbnailGeneratedAt: new Date(),
             thumbnailSource: thumb.source,
+            thumbnailInputHash: (thumb as any).inputHash ?? null,
+            heroImageUrl: hero.url,
+            heroImageGeneratedAt: new Date(),
+            heroImageSource: hero.source,
+            heroImageInputHash: hero.inputHash,
             linkStatus: link.status,
             lastCheckedAt: c.lastCheckedAt ?? new Date(),
             source: 'AI_ENRICHED',
