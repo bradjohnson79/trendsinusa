@@ -1,9 +1,0 @@
-{
-  "buildCommand": "pnpm --filter @trendsinusa/web build && pnpm check:boundaries && pnpm check:web-env",
-  "outputDirectory": "apps/web/dist",
-  "rewrites": [
-    { "source": "/admin/:path*", "destination": "/index.html" },
-    { "source": "/:path*", "destination": "/index.html" }
-  ]
-}
-
