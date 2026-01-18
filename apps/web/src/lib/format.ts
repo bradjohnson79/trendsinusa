@@ -28,3 +28,25 @@ export function relativeTimeFrom(date: Date, now = new Date()): string {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+
+export function countdownFromIso(
+  expiresAtIso: string | null | undefined,
+  now = new Date(),
+):
+  | null
+  | {
+      label: string;
+      state: 'normal' | 'urgent' | 'expired';
+      remainingMs: number;
+    } {
+  if (!expiresAtIso) return null;
+  const exp = new Date(expiresAtIso);
+  if (Number.isNaN(exp.getTime())) return null;
+  const diff = exp.getTime() - now.getTime();
+  if (diff <= 0) return { label: 'Expired', state: 'expired', remainingMs: 0 };
+  const mins = Math.max(0, Math.floor(diff / 60000));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const state: 'normal' | 'urgent' = diff < 60 * 60 * 1000 ? 'urgent' : 'normal';
+  return { label: `Expires in ${h}h ${m}m`, state, remainingMs: diff };
+}

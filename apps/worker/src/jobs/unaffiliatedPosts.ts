@@ -1,10 +1,22 @@
 import { prisma } from '@trendsinusa/db';
 import type { DiscoveryCandidateRetailer } from '@prisma/client';
 import { generateShortText } from '../ai/openai.js';
-import { deriveHeroContextFromPost, generateHeroImageDataUrl, generateShortDescription, generateThumbnailDataUrl, verifyLink } from '../enrichment/postEnrichment.js';
+import {
+  deriveHeroContextFromPost,
+  generateHeroImageDataUrl,
+  generateShortDescription,
+  generateThumbnailDataUrl,
+  verifyLink,
+  verifyOutboundLink,
+} from '../enrichment/postEnrichment.js';
 import { isUnaffiliatedAutoPublishEnabled } from '../ingestion/gate.js';
 import { expireUnaffiliatedPosts } from '../maintenance/unaffiliatedPosts.js';
 import { getTodayUTC } from '../utils/time.js';
+
+function freshnessWindowHoursForRetailer(r: DiscoveryCandidateRetailer): number {
+  if (r === 'AMAZON') return 12;
+  return 24; // WALMART, TARGET, BEST_BUY
+}
 
 function safeSlug(s: string) {
   return s
@@ -107,6 +119,10 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
   // Expire old posts opportunistically each run (kept for audit).
   const expired = await expireUnaffiliatedPosts(now);
 
+
+  let linkChecks = 0;
+  let expiredByLink = 0;
+
   // Best-effort backfill for existing published posts missing enrichment.
   // (Bounded; must not block publishing.)
   const postsToBackfill = await prisma.unaffiliatedPost
@@ -186,10 +202,28 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
           }
         }
       }
-      if (p.linkStatus === 'UNKNOWN' && !p.lastCheckedAt) {
-        const r = await verifyLink(p.outboundUrl);
+      if (!p.expiresAt) {
+        const win = freshnessWindowHoursForRetailer(p.retailer as DiscoveryCandidateRetailer);
+        patch.freshnessWindowHours = win;
+        patch.expiresAt = new Date(new Date(p.discoveredAt).getTime() + win * 60 * 60 * 1000);
+      }
+
+      // Re-verify link every ~3h until expiry (fail-closed; never blocks publishing).
+      const expiresAt2 = (patch.expiresAt as Date | undefined) ?? (p.expiresAt ? new Date(p.expiresAt) : null);
+      const shouldCheck =
+        expiresAt2 != null &&
+        expiresAt2.getTime() > now.getTime() &&
+        (p.lastCheckedAt == null || now.getTime() - new Date(p.lastCheckedAt).getTime() >= 3 * 60 * 60 * 1000);
+      if (shouldCheck) {
+        linkChecks += 1;
+        const r = await verifyOutboundLink(p.outboundUrl);
         patch.linkStatus = r.status;
-        patch.lastCheckedAt = new Date();
+        patch.lastCheckedAt = now;
+        if (!r.isActive) {
+          patch.status = 'EXPIRED';
+          patch.expiresAt = now;
+          expiredByLink += 1;
+        }
       }
       if (Object.keys(patch).length) {
         await prisma.unaffiliatedPost.update({ where: { id: p.id }, data: patch });
@@ -199,10 +233,7 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
     }
   }
 
-  // Post TTL: clamp to 30..60 days (default 45).
-  const ttlRaw = Number(process.env.UNAFFILIATED_POST_TTL_DAYS ?? 45);
-  const ttlDays = Number.isFinite(ttlRaw) ? Math.max(30, Math.min(60, Math.trunc(ttlRaw))) : 45;
-  const postExpiresAt = new Date(now.getTime() + ttlDays * 24 * 60 * 60 * 1000);
+  // Posts use a retailer freshness window for real urgency (no evergreen countdowns).
 
   const candidates = await prisma.discoveryCandidate.findMany({
     where: {
@@ -241,6 +272,12 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
     try {
       const retailer = c.retailer as DiscoveryCandidateRetailer;
       const category = c.category ?? 'General';
+      const freshnessWindowHours = freshnessWindowHoursForRetailer(retailer);
+      const expiresAt = new Date(c.discoveredAt.getTime() + freshnessWindowHours * 60 * 60 * 1000);
+      if (expiresAt.getTime() <= now.getTime()) {
+        skipped.push({ id: c.id, reason: 'freshness_window_expired' });
+        continue;
+      }
       const shortDescription =
         c.shortDescription ??
         (c.description ? c.description.split(/[.!?]\s/)[0]?.trim().split(/\s+/).slice(0, 20).join(' ') : null) ??
@@ -323,6 +360,8 @@ Keep it short and SEO-safe.`;
             body,
             imageSetId: intent?.id ?? null,
             outboundUrl: c.outboundUrl,
+            discoveredAt: c.discoveredAt,
+            freshnessWindowHours,
             shortDescription: shortDescription ?? null,
             thumbnailUrl: thumb.url,
             thumbnailGeneratedAt: new Date(),
@@ -332,7 +371,7 @@ Keep it short and SEO-safe.`;
             source: 'AI_ENRICHED',
             status: 'PUBLISHED',
             publishedAt: now,
-            expiresAt: postExpiresAt,
+            expiresAt,
             discoveryCandidateId: c.id,
           },
           select: { id: true },
@@ -358,6 +397,6 @@ Keep it short and SEO-safe.`;
     }
   }
 
-  return { ok: true as const, created, skipped, expired };
+  return { ok: true as const, created, skipped, expired, linkChecks, expiredByLink };
 }
 

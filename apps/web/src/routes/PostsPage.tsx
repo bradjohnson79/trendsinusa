@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { UnaffiliatedPostPublic, UnaffiliatedPostsResponse } from '@trendsinusa/shared/api';
 import { api, ApiClientError } from '@/lib/api';
 import { setSeo } from '@/lib/seo';
+import { countdownFromIso, relativeTimeFrom } from '@/lib/format';
 import { siteConfig } from '@/sites/config';
 
 function isDead(linkStatus: any) {
@@ -102,14 +103,34 @@ export function PostsPage() {
                         {p.title}
                       </Link>
                       <div className="text-xs text-slate-500">
-                        {p.publishedAt ? `Updated ${hoursAgo(now, p.publishedAt)}h ago` : '—'}
+                        {(() => {
+                          const t = (p as any).lastCheckedAt ?? p.publishedAt ?? p.createdAt;
+                          const label = t ? `Updated ${relativeTimeFrom(new Date(t), new Date(now))}` : '—';
+                          return label;
+                        })()}
                       </div>
                     </div>
                     <div className="mt-1 text-xs text-slate-600">
                       {p.retailer} · {p.category}
                     </div>
                     <div className="mt-2 text-xs text-slate-600">{(p as any).shortDescription ?? '—'}</div>
+                    {(() => {
+                      const t = (p as any).lastCheckedAt ?? p.publishedAt ?? p.createdAt;
+                      const cd = countdownFromIso(p.expiresAt, new Date(now));
+                      if (!t || cd?.state === 'expired') return null;
+                      const d = new Date(t);
+                      const mins = Math.max(0, Math.floor((new Date(now).getTime() - d.getTime()) / 60000));
+                      if (mins >= 120) return null;
+                      const cls = mins < 30 ? 'mt-2 text-xs font-medium text-emerald-700' : 'mt-2 text-xs text-slate-600';
+                      return <div className={cls}>Updated {relativeTimeFrom(d, new Date(now))}</div>;
+                    })()}
                     <div className="mt-3 text-sm text-slate-700">{p.summary}</div>
+                    {(() => {
+                      const c = countdownFromIso(p.expiresAt, new Date(now));
+                      if (!c) return null;
+                      const cls = c.state === 'expired' ? 'mt-2 text-xs text-slate-500' : c.state === 'urgent' ? 'mt-2 text-xs text-amber-700' : 'mt-2 text-xs text-slate-600';
+                      return <div className={cls}>{c.label}</div>;
+                    })()}
                     <div className="mt-3 text-xs">
                       {!isDead((p as any).linkStatus) ? (
                         <a href={p.outboundUrl} target="_blank" rel="noreferrer" className="text-slate-600 hover:underline">

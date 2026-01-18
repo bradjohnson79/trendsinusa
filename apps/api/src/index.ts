@@ -482,6 +482,8 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
           retailer: true,
           category: true,
           summary: true,
+          discoveredAt: true,
+          freshnessWindowHours: true,
           shortDescription: true,
           thumbnailUrl: true,
           thumbnailGeneratedAt: true,
@@ -512,6 +514,8 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
         retailer: p.retailer,
         category: p.category,
         summary: p.summary,
+        discoveredAt: p.discoveredAt ? p.discoveredAt.toISOString() : p.createdAt.toISOString(),
+        freshnessWindowHours: typeof p.freshnessWindowHours === 'number' ? p.freshnessWindowHours : 24,
         shortDescription: p.shortDescription ?? null,
         thumbnailUrl: p.thumbnailUrl ?? null,
         thumbnailGeneratedAt: p.thumbnailGeneratedAt ? p.thumbnailGeneratedAt.toISOString() : null,
@@ -549,6 +553,8 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
           category: true,
           summary: true,
           body: true,
+          discoveredAt: true,
+          freshnessWindowHours: true,
           shortDescription: true,
           thumbnailUrl: true,
           thumbnailGeneratedAt: true,
@@ -570,8 +576,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       })
       .catch(() => null);
     if (!row) return json(res, 404, { error: 'not_found', message: 'Post not found' });
-    if (row.status !== 'PUBLISHED') return json(res, 404, { error: 'not_found', message: 'Post not published' });
-    if (row.expiresAt && row.expiresAt <= now) return json(res, 404, { error: 'not_found', message: 'Post expired' });
+    if (!['PUBLISHED', 'EXPIRED'].includes(String(row.status))) return json(res, 404, { error: 'not_found', message: 'Post not available' });
 
     return json(res, 200, {
       id: row.id,
@@ -581,6 +586,8 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       category: row.category,
       summary: row.summary,
       body: row.body,
+      discoveredAt: row.discoveredAt ? row.discoveredAt.toISOString() : row.createdAt.toISOString(),
+      freshnessWindowHours: typeof (row as any).freshnessWindowHours === 'number' ? (row as any).freshnessWindowHours : 24,
       shortDescription: row.shortDescription ?? null,
       thumbnailUrl: row.thumbnailUrl ?? null,
       thumbnailGeneratedAt: row.thumbnailGeneratedAt ? row.thumbnailGeneratedAt.toISOString() : null,

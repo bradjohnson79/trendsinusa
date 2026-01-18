@@ -267,6 +267,10 @@ model UnaffiliatedPost {
   body       String                    @db.Text
   imageSetId String?
   outboundUrl String
+  // Copied from discovery candidate (UTC). Used for real urgency and countdown math.
+  discoveredAt DateTime @default(now())
+  // Retailer-specific freshness window used for expiresAt computation.
+  freshnessWindowHours Int @default(24)
   shortDescription String?
   thumbnailUrl String?
   thumbnailGeneratedAt DateTime?

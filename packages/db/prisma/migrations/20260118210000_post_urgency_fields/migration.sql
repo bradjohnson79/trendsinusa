@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "UnaffiliatedPost"
+ADD COLUMN     "discoveredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "freshnessWindowHours" INTEGER NOT NULL DEFAULT 24;
+

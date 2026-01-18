@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { UnaffiliatedPostDetailResponse } from '@trendsinusa/shared/api';
 import { api, ApiClientError } from '@/lib/api';
 import { setSeo } from '@/lib/seo';
+import { countdownFromIso, relativeTimeFrom } from '@/lib/format';
 import { siteConfig } from '@/sites/config';
 
 function isDead(linkStatus: any) {
@@ -96,6 +97,19 @@ export function PostPage() {
           <h1 className="text-3xl font-semibold tracking-tight">{post.title}</h1>
           <div className="text-xs text-slate-500">
             {post.retailer} · {post.category} · Published {post.publishedAt ?? post.createdAt}
+            {(() => {
+              const c = countdownFromIso((post as any).expiresAt, new Date());
+              if (!c) return null;
+              const cls = c.state === 'expired' ? 'ml-2 text-slate-500' : c.state === 'urgent' ? 'ml-2 text-amber-700' : 'ml-2 text-slate-600';
+              return <span className={cls}>· {c.label}</span>;
+            })()}
+            {(() => {
+              const t = (post as any).lastCheckedAt ?? post.publishedAt ?? post.createdAt;
+              if (!t) return null;
+              const c = countdownFromIso((post as any).expiresAt, new Date());
+              if (c?.state === 'expired') return null;
+              return <span className="ml-2 text-slate-600">· Updated {relativeTimeFrom(new Date(t), new Date())}</span>;
+            })()}
           </div>
 
           <div className="flex flex-col gap-3 md:flex-row md:items-start">

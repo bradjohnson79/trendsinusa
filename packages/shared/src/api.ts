@@ -112,6 +112,8 @@ export const UnaffiliatedPostPublicSchema = z.object({
   retailer: z.enum(['AMAZON', 'WALMART', 'TARGET', 'BEST_BUY']),
   category: z.string(),
   summary: z.string(),
+  discoveredAt: z.string().optional(),
+  freshnessWindowHours: z.number().int().optional(),
   shortDescription: z.string().nullable().optional(),
   thumbnailUrl: z.string().nullable().optional(),
   thumbnailGeneratedAt: z.string().nullable().optional(),
