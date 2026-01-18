@@ -870,7 +870,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       prisma.automationConfig
         .findUnique({
           where: { siteKey },
-          select: { siteKey: true, automationEnabled: true, imageGenEnabled: true, heroRegenerateAt: true, categoryRegenerateAt: true },
+          select: { siteKey: true, automationEnabled: true, discoveryEnabled: true, imageGenEnabled: true, heroRegenerateAt: true, categoryRegenerateAt: true },
         })
         .catch(() => null),
       prisma.automationGate
@@ -1016,6 +1016,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       config: {
         siteKey,
         automationEnabled,
+        discoveryEnabled: cfg?.discoveryEnabled ?? false,
         imageGenEnabled: cfg?.imageGenEnabled ?? false,
         heroRegenerateAt: cfg?.heroRegenerateAt ? cfg.heroRegenerateAt.toISOString() : null,
         categoryRegenerateAt: cfg?.categoryRegenerateAt ? cfg.categoryRegenerateAt.toISOString() : null,
@@ -1026,6 +1027,22 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       schedules,
       jobs,
     });
+  }
+
+  // -------------------------
+  // Admin: Discovery controls (DB-backed)
+  // -------------------------
+  if (path === '/api/admin/automation/discovery-enabled') {
+    if (method !== 'POST') return methodNotAllowed(res);
+    const body = (await readJson(req).catch(() => null)) as any;
+    const enabled = Boolean(body?.enabled);
+    const existing = await prisma.automationConfig.findUnique({ where: { siteKey }, select: { id: true } }).catch(() => null);
+    if (existing) {
+      await prisma.automationConfig.update({ where: { siteKey }, data: { discoveryEnabled: enabled } });
+    } else {
+      await prisma.automationConfig.create({ data: { siteKey, discoveryEnabled: enabled } });
+    }
+    return json(res, 200, { ok: true });
   }
 
   const scheduleMatch = path.match(/^\/api\/admin\/automation\/schedules\/([^/]+)$/);

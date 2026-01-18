@@ -93,12 +93,18 @@ export async function runDiscoverySweep(params: { siteKey?: string } = {}) {
   const env = getServerEnv();
   const siteKey = params.siteKey ?? 'trendsinusa';
 
-  if (String(process.env.DISCOVERY_ENABLED ?? 'false').toLowerCase() !== 'true') {
-    return { ok: true as const, skipped: true as const, reason: 'DISCOVERY_ENABLED=false' };
+  // Discovery is DB-gated (fail-closed). .env may be used as an emergency hard stop only.
+  const cfg = await prisma.automationConfig
+    .findUnique({ where: { siteKey }, select: { discoveryEnabled: true, automationEnabled: true } })
+    .catch(() => null);
+  if (!cfg?.discoveryEnabled) {
+    return { ok: true as const, skipped: true as const, reason: 'discovery_disabled' };
+  }
+  if (String(process.env.DISCOVERY_FORCE_DISABLED ?? 'false').toLowerCase() === 'true') {
+    return { ok: true as const, skipped: true as const, reason: 'force_disabled' };
   }
 
   // Gate behind automationEnabled (no surprise background behavior)
-  const cfg = await prisma.automationConfig.findUnique({ where: { siteKey }, select: { automationEnabled: true } }).catch(() => null);
   if (!cfg?.automationEnabled) {
     return { ok: true as const, skipped: true as const, reason: 'automationEnabled=false' };
   }

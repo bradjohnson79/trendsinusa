@@ -42,6 +42,7 @@ export function AdminAutomationPage() {
   }
 
   const automationEnabled = data?.config.automationEnabled ?? false;
+  const discoveryEnabled = data?.config.discoveryEnabled ?? false;
   const unaffiliatedAutoPublishEnabled = data?.publishing?.unaffiliatedAutoPublishEnabled ?? false;
 
   useEffect(() => {
@@ -159,6 +160,37 @@ export function AdminAutomationPage() {
                 When enabled, discovery candidates may be automatically published as non-affiliate posts on schedule. Affiliate credentials are not required.
               </div>
               {!automationEnabled ? <div className="text-xs text-slate-500">Enable automation to modify publishing controls.</div> : null}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 p-4 text-sm font-medium text-slate-900">Discovery controls</div>
+            <div className="p-4 space-y-2">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={discoveryEnabled}
+                  disabled={!automationEnabled || busy === 'discoveryEnabled'}
+                  onChange={async (e) => {
+                    try {
+                      setErr(null);
+                      setOkMsg(null);
+                      setBusy('discoveryEnabled');
+                      await api.admin.setDiscoveryEnabled({ enabled: e.currentTarget.checked });
+                      await refresh();
+                      setOkMsg('Saved.');
+                      window.setTimeout(() => setOkMsg(null), 2500);
+                    } catch (ex: unknown) {
+                      setErr(ex instanceof ApiClientError ? ex.message : 'Failed to save');
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                />
+                Enable Discovery (Trending Source Ingestion)
+              </label>
+              <div className="text-xs text-slate-500">Controls whether automated discovery sources may ingest new trend candidates.</div>
+              {!automationEnabled ? <div className="text-xs text-slate-500">Enable automation to modify discovery controls.</div> : null}
             </div>
           </div>
 

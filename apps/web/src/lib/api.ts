@@ -114,6 +114,12 @@ export const api = {
     disableAutomation() {
       return fetchJson('/api/admin/automation/disable', AdminMutationResponseSchema, { method: 'POST', body: JSON.stringify({}) });
     },
+    setDiscoveryEnabled(input: { enabled: boolean }) {
+      return fetchJson('/api/admin/automation/discovery-enabled', AdminMutationResponseSchema, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+    },
     setUnaffiliatedAutoPublishEnabled(input: { enabled: boolean }) {
       return fetchJson('/api/admin/automation/unaffiliated-auto-publish', AdminMutationResponseSchema, {
         method: 'POST',

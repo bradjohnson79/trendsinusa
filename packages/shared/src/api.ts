@@ -195,6 +195,7 @@ export type AdminDashboardResponse = z.infer<typeof AdminDashboardResponseSchema
 export const AdminAutomationConfigSchema = z.object({
   siteKey: z.string(),
   automationEnabled: z.boolean().optional(),
+  discoveryEnabled: z.boolean().optional(),
   imageGenEnabled: z.boolean(),
   heroRegenerateAt: z.string().nullable().optional(),
   categoryRegenerateAt: z.string().nullable().optional(),

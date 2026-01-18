@@ -595,6 +595,8 @@ model AutomationConfig {
   siteKey            String   @unique
 
   automationEnabled  Boolean  @default(false)
+  // Discovery (AI-only) is fail-closed by default and controlled via admin UI.
+  discoveryEnabled   Boolean  @default(false)
   imageGenEnabled    Boolean  @default(false)
   heroRegenerateAt   DateTime?
   categoryRegenerateAt DateTime?

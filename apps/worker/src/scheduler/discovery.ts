@@ -30,8 +30,11 @@ async function processDiscoveryCommands(now: Date) {
  * Cron-compatible discovery runner.
  * One-shot: exit 0/1. Does NOT run ingestion.
  *
- * Optionally auto-enqueues a discovery command if DISCOVERY_ENABLED=true and
- * automationEnabled=true and the last SUCCESS was >4h ago.
+ * Optionally auto-enqueues a discovery command if discoveryEnabled=true and
+ * automationEnabled=true (DB-backed gates) and the last SUCCESS was >4h ago.
+ *
+ * Emergency override:
+ * - DISCOVERY_FORCE_DISABLED=true will hard-stop discovery (not exposed in UI).
  */
 async function main() {
   const now = new Date();
@@ -39,10 +42,12 @@ async function main() {
   const auto = String(process.env.DISCOVERY_AUTO_ENQUEUE ?? 'false').toLowerCase() === 'true';
   if (auto) {
     const siteKey = process.env.SITE_KEY ?? 'trendsinusa';
-    const cfg = await prisma.automationConfig.findUnique({ where: { siteKey }, select: { automationEnabled: true } }).catch(() => null);
-    const enabled = String(process.env.DISCOVERY_ENABLED ?? 'false').toLowerCase() === 'true';
+    const cfg = await prisma.automationConfig
+      .findUnique({ where: { siteKey }, select: { automationEnabled: true, discoveryEnabled: true } })
+      .catch(() => null);
 
-    if (enabled && cfg?.automationEnabled) {
+    const forceDisabled = String(process.env.DISCOVERY_FORCE_DISABLED ?? 'false').toLowerCase() === 'true';
+    if (!forceDisabled && cfg?.automationEnabled && cfg?.discoveryEnabled) {
       const last = await prisma.systemCommand
         .findFirst({ where: { type: 'DISCOVERY_SWEEP', siteKey, status: 'SUCCESS' }, orderBy: { processedAt: 'desc' }, select: { processedAt: true } })
         .catch(() => null);
