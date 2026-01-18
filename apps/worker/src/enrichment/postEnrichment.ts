@@ -49,25 +49,18 @@ export function fallbackThumbnailSvg(params: { title: string; category: string |
   const icon = (() => {
     if (cat.includes('elect')) {
       // monitor
-      return `<rect x="46" y="50" width="58" height="38" rx="6" />
-              <path d="M62 98h26" />`;
+      return `<rect x="46" y="50" width="58" height="38" rx="6" />\n              <path d="M62 98h26" />`;
     }
     if (cat.includes('kitchen') || cat.includes('home')) {
       // home
-      return `<path d="M52 78l23-20 23 20" />
-              <path d="M58 74v28h34V74" />`;
+      return `<path d="M52 78l23-20 23 20" />\n              <path d="M58 74v28h34V74" />`;
     }
     if (cat.includes('fitness') || cat.includes('sport')) {
       // dumbbell
-      return `<path d="M52 78h46" />
-              <path d="M48 70v16" />
-              <path d="M102 70v16" />
-              <path d="M42 72v12" />
-              <path d="M108 72v12" />`;
+      return `<path d="M52 78h46" />\n              <path d="M48 70v16" />\n              <path d="M102 70v16" />\n              <path d="M42 72v12" />\n              <path d="M108 72v12" />`;
     }
     // generic product glyph
-    return `<path d="M52 72c0-14 10-26 23-26s23 12 23 26-10 26-23 26-23-12-23-26z"/>
-            <path d="M58 102h34"/>`;
+    return `<path d="M52 72c0-14 10-26 23-26s23 12 23 26-10 26-23 26-23-12-23-26z"/>\n            <path d="M58 102h34"/>`;
   })();
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -80,10 +73,6 @@ export function fallbackThumbnailSvg(params: { title: string; category: string |
 </svg>`;
 }
 
-function escapeXml(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&apos;');
-}
-
 export async function generateThumbnailDataUrl(params: { title: string; category: string | null }): Promise<{ url: string; source: 'ai' | 'fallback' }> {
   // Try OpenAI image generation (if available), then downscale to 150x150 and force white background.
   // If anything fails, return fallback SVG.
@@ -91,8 +80,8 @@ export async function generateThumbnailDataUrl(params: { title: string; category
     const model = process.env.AI_IMAGE_MODEL ?? 'dall-e-3';
     const prompt = `Create a clean, realistic product image suitable for a shopping website thumbnail.
 
-Product name: \"${params.title}\"
-Category: \"${params.category ?? 'General'}\"
+Product name: "${params.title}"
+Category: "${params.category ?? 'General'}"
 
 Style requirements:
 - plain white background
@@ -146,9 +135,9 @@ Rules:
 - no affiliate language
 - max 20 words
 
-Product: \"${params.title}\"
-Category: \"${params.category}\"
-Retailer: \"${params.retailer}\"`,
+Product: "${params.title}"
+Category: "${params.category}"
+Retailer: "${params.retailer}"`,
       temperature: 0,
       maxOutputTokens: 60,
     });
@@ -160,3 +149,66 @@ Retailer: \"${params.retailer}\"`,
   }
 }
 
+function extractWhatItIsSummaryMarkdown(md: string): string {
+  const lines = String(md || '').split('\n');
+  const idx = lines.findIndex((l) => l.trim().toLowerCase() === '## what it is');
+  if (idx === -1) return '';
+  const out: string[] = [];
+  for (let i = idx + 1; i < lines.length; i++) {
+    const t = String(lines[i] ?? '').trim();
+    if (!t) continue;
+    if (t.startsWith('## ')) break;
+    if (t.startsWith('- ')) continue;
+    out.push(t);
+    if (out.join(' ').length >= 220) break;
+  }
+  return out.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+export function deriveHeroContextFromPost(params: { body: string; summary: string; shortDescription: string | null }) {
+  const fromWhat = extractWhatItIsSummaryMarkdown(params.body);
+  if (fromWhat) return fromWhat;
+  if (params.shortDescription) return params.shortDescription;
+  const fromSummary = String(params.summary || '').split(/[.!?]\s/)[0]?.trim() ?? '';
+  return fromSummary || '';
+}
+
+export async function generateHeroImageDataUrl(params: {
+  title: string;
+  category: string | null;
+  context: string | null;
+}): Promise<{ url: string; source: 'ai' } | null> {
+  // AI-only (no scraping). If generation fails, return null and keep placeholder.
+  try {
+    const model = process.env.AI_IMAGE_MODEL ?? 'dall-e-3';
+    const context = (params.context || '').trim();
+    const prompt = `Create a realistic, editorial-style product image suitable for a blog post.
+
+Product: "${params.title}"
+Category: "${params.category ?? 'General'}"
+Context: "${context || 'Informational product overview.'}"
+
+Style guidelines:
+- realistic product appearance
+- clean, neutral environment (light interior, tabletop, lifestyle scene)
+- soft natural lighting
+- no logos, no text, no branding, no watermarks
+- centered subject
+- square format`;
+
+    const url = await generatePromoImage({ model, prompt, size: '1024x1024' });
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`image_download_failed:${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+
+    const hero = await sharp(buf)
+      .resize(400, 400, { fit: 'cover', position: 'attention' })
+      .flatten({ background: '#f5f5f5' })
+      .webp({ quality: 84 })
+      .toBuffer();
+
+    return { url: `data:image/webp;base64,${hero.toString('base64')}`, source: 'ai' };
+  } catch {
+    return null;
+  }
+}

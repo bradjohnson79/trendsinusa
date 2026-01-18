@@ -1,7 +1,7 @@
 import { prisma } from '@trendsinusa/db';
 import type { DiscoveryCandidateRetailer } from '@prisma/client';
 import { generateShortText } from '../ai/openai.js';
-import { generateShortDescription, generateThumbnailDataUrl, verifyLink } from '../enrichment/postEnrichment.js';
+import { deriveHeroContextFromPost, generateHeroImageDataUrl, generateShortDescription, generateThumbnailDataUrl, verifyLink } from '../enrichment/postEnrichment.js';
 import { isUnaffiliatedAutoPublishEnabled } from '../ingestion/gate.js';
 import { expireUnaffiliatedPosts } from '../maintenance/unaffiliatedPosts.js';
 
@@ -112,11 +112,30 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
     .findMany({
       where: {
         status: 'PUBLISHED',
-        OR: [{ shortDescription: null }, { thumbnailUrl: null }, { AND: [{ linkStatus: 'UNKNOWN' as any }, { lastCheckedAt: null }] }],
+        OR: [
+          { shortDescription: null },
+          { thumbnailUrl: null },
+          { heroImageUrl: null },
+          { AND: [{ linkStatus: 'UNKNOWN' as any }, { lastCheckedAt: null }] },
+        ],
       },
       orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
       take: 5,
-      select: { id: true, title: true, retailer: true, category: true, summary: true, outboundUrl: true, shortDescription: true, thumbnailUrl: true, linkStatus: true, lastCheckedAt: true },
+      select: {
+        id: true,
+        title: true,
+        retailer: true,
+        category: true,
+        summary: true,
+        body: true,
+        outboundUrl: true,
+        discoveryCandidateId: true,
+        shortDescription: true,
+        thumbnailUrl: true,
+        linkStatus: true,
+        lastCheckedAt: true,
+        heroImageUrl: true,
+      },
     })
     .catch(() => [] as any[]);
   for (const p of postsToBackfill) {
@@ -133,6 +152,38 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
         patch.thumbnailUrl = t.url;
         patch.thumbnailGeneratedAt = new Date();
         patch.thumbnailSource = t.source;
+      }
+      if (!p.heroImageUrl) {
+        const minRaw = Number(process.env.HERO_IMAGE_MIN_CONFIDENCE ?? 0.75);
+        const min = Number.isFinite(minRaw) ? Math.max(0, Math.min(1, minRaw)) : 0.75;
+        let okByConfidence = min <= 0;
+        if (!okByConfidence) {
+          const c = p.discoveryCandidateId
+            ? await prisma.discoveryCandidate.findUnique({ where: { id: p.discoveryCandidateId }, select: { confidenceScore: true } }).catch(() => null)
+            : null;
+          const score = c?.confidenceScore ?? null;
+          okByConfidence = score != null && score >= min;
+        }
+        if (okByConfidence) {
+          const context = deriveHeroContextFromPost({ body: p.body ?? '', summary: p.summary ?? '', shortDescription: p.shortDescription ?? null });
+          const hero = await generateHeroImageDataUrl({ title: p.title, category: p.category ?? null, context });
+          if (hero?.url) {
+            patch.heroImageUrl = hero.url;
+            patch.heroImageGeneratedAt = new Date();
+            patch.heroImageSource = hero.source;
+          } else {
+            await prisma.systemAlert
+              .create({
+                data: {
+                  type: 'SYSTEM',
+                  severity: 'WARNING',
+                  noisy: false,
+                  message: `[hero-image] post=${p.id} generation failed (kept placeholder)`,
+                },
+              })
+              .catch(() => null);
+          }
+        }
       }
       if (p.linkStatus === 'UNKNOWN' && !p.lastCheckedAt) {
         const r = await verifyLink(p.outboundUrl);

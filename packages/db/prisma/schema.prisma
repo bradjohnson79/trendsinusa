@@ -169,6 +169,11 @@ enum LinkStatus {
   UNKNOWN
 }
 
+enum HeroImageSource {
+  ai
+  placeholder
+}
+
 model AutomationGate {
   id                String   @id @default(cuid())
   siteKey            String   @unique
@@ -266,6 +271,9 @@ model UnaffiliatedPost {
   thumbnailUrl String?
   thumbnailGeneratedAt DateTime?
   thumbnailSource String?
+  heroImageUrl String?
+  heroImageGeneratedAt DateTime?
+  heroImageSource HeroImageSource @default(placeholder)
   linkStatus LinkStatus @default(UNKNOWN)
   lastCheckedAt DateTime?
   source     UnaffiliatedPostSource
