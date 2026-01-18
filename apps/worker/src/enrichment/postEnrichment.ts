@@ -212,3 +212,88 @@ Style guidelines:
     return null;
   }
 }
+
+export type OutboundLinkVerification = {
+  isActive: boolean;
+  status: 'ACTIVE' | 'DEAD' | 'UNKNOWN';
+  finalUrl: string | null;
+  httpStatus: number | null;
+  reason: string;
+};
+
+function looksLikeSearchOrHomepage(finalUrl: string): boolean {
+  try {
+    const u = new URL(finalUrl);
+    const p = u.pathname || '/';
+    if (p === '/' || p === '') return true;
+    const q = (u.search || '').toLowerCase();
+    const path = p.toLowerCase();
+    if (path.includes('/search')) return true;
+    if (q.includes('search=')) return true;
+    if (q.includes('q=')) return true;
+    // Amazon common search pattern: /s?k=...
+    if (path === '/s' && q.includes('k=')) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function containsUnavailableSignals(htmlLower: string): boolean {
+  const bad = [
+    'currently unavailable',
+    'no longer available',
+    'this item is no longer available',
+    'page not found',
+    'not available',
+    'out of stock',
+  ];
+  return bad.some((s) => htmlLower.includes(s));
+}
+
+async function fetchTextBestEffort(url: string, timeoutMs: number): Promise<{ ok: boolean; status: number | null; finalUrl: string | null; text: string }> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { method: 'GET', redirect: 'follow', signal: ac.signal, headers: { accept: 'text/html,*/*' } });
+    const finalUrl = res.url || null;
+    const ct = (res.headers.get('content-type') ?? '').toLowerCase();
+    if (!ct.includes('text/html')) {
+      return { ok: res.ok, status: res.status, finalUrl, text: '' };
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    const limited = buf.subarray(0, Math.min(buf.length, 200_000)).toString('utf8');
+    return { ok: res.ok, status: res.status, finalUrl, text: limited };
+  } catch {
+    return { ok: false, status: null, finalUrl: null, text: '' };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+export async function verifyOutboundLink(url: string): Promise<OutboundLinkVerification> {
+  const timeoutMs = 5000;
+
+  const head = await verifyLink(url);
+  if (head.status === 'DEAD') {
+    return { isActive: false, status: 'DEAD', finalUrl: null, httpStatus: head.httpStatus, reason: 'dead_http' };
+  }
+
+  const page = await fetchTextBestEffort(url, timeoutMs);
+  const finalUrl = page.finalUrl;
+  if (finalUrl && looksLikeSearchOrHomepage(finalUrl)) {
+    return { isActive: false, status: 'DEAD', finalUrl, httpStatus: page.status, reason: 'redirect_to_search_or_home' };
+  }
+
+  const htmlLower = (page.text || '').toLowerCase();
+  if (htmlLower && containsUnavailableSignals(htmlLower)) {
+    return { isActive: false, status: 'DEAD', finalUrl, httpStatus: page.status, reason: 'unavailable_text' };
+  }
+
+  if (head.status === 'ACTIVE') {
+    return { isActive: true, status: 'ACTIVE', finalUrl, httpStatus: head.httpStatus, reason: 'ok' };
+  }
+
+  // Fail-closed: unknown => inactive.
+  return { isActive: false, status: 'UNKNOWN', finalUrl, httpStatus: head.httpStatus, reason: 'unknown' };
+}

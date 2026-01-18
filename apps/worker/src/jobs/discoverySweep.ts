@@ -6,6 +6,8 @@ import { generateShortText } from '../ai/openai.js';
 import { perplexityResearch } from '../ai/perplexity.js';
 import { generateShortDescription, generateThumbnailDataUrl, verifyLink } from '../enrichment/postEnrichment.js';
 import { ensurePostingItemForDiscovery } from '../posting/lifecycle.js';
+import { verifyOutboundLink } from '../enrichment/postEnrichment.js';
+import { getTodayUTC } from '../utils/time.js';
 
 const PROMPT_VERSION = 'discovery-sweep-v1';
 
@@ -19,6 +21,7 @@ type NormalizedCandidate = {
   imageQuery: string | null;
   outboundUrl: string;
   confidenceScore: number | null;
+  sourcePublishedAt: string | null;
 };
 
 function normalizeWhitespace(s: string) {
@@ -62,6 +65,9 @@ function validateCandidate(x: any, categoryHint: string): NormalizedCandidate | 
 
   const confidenceScore = clampConfidence(x?.confidenceScore);
 
+  const spaRaw = x?.sourcePublishedAt != null ? String(x.sourcePublishedAt).trim() : '';
+  const sourcePublishedAt = spaRaw ? spaRaw : null;
+
   // Hard guardrails: discovery layer must not carry prices or affiliate fields.
   // (We can't fully “prove” absence in arbitrary strings, but we at least reject obvious currency markers.)
   const joined = `${title} ${description ?? ''}`.toLowerCase();
@@ -75,6 +81,7 @@ function validateCandidate(x: any, categoryHint: string): NormalizedCandidate | 
     imageQuery: imageQuery || null,
     outboundUrl,
     confidenceScore,
+    sourcePublishedAt,
   };
 }
 
@@ -126,6 +133,23 @@ export async function runDiscoverySweep(params: { siteKey?: string } = {}) {
   const now = new Date();
   const expiresInMs = 72 * 60 * 60 * 1000;
   const expiresAt = new Date(now.getTime() + expiresInMs);
+
+  const today = getTodayUTC();
+  const freshnessWindowHours = 24;
+  const freshestAllowed = new Date(today.getTime() - freshnessWindowHours * 60 * 60 * 1000);
+
+  function parseSourcePublishedAt(v: string | null): Date | null {
+    if (!v) return null;
+    const d = new Date(v);
+    return d.getTime() != d.getTime() ? null : d;
+  }
+
+  function freshnessScoreFrom(spa: Date | null): number | null {
+    if (!spa) return null;
+    const ageHours = (today.getTime() - spa.getTime()) / 36e5;
+    const clamped = Math.max(0, Math.min(1, 1 - Math.max(0, ageHours) / freshnessWindowHours));
+    return clamped;
+  }
 
   const perplexityModel = env.AI_RESEARCH_MODEL; // uses the same env shape as other research flows
   const openaiModel = env.AI_FINAL_MODEL;
@@ -244,6 +268,23 @@ ${research}`;
 
     // 3) Persist with dedupe by normalized title + retailer (best-effort)
     for (const c of perRetailerCandidates.slice(0, limitPerRetailer)) {
+      // Freshness enforcement (UTC anchored): reject before any DB write.
+      const spa = parseSourcePublishedAt(c.sourcePublishedAt ?? null);
+      if (spa) {
+        const ageHours = (today.getTime() - spa.getTime()) / 36e5;
+        if (ageHours > freshnessWindowHours) {
+          continue;
+        }
+      }
+
+      // Always verify link before storing. Fail-closed.
+      const v = await verifyOutboundLink(c.outboundUrl);
+      if (!v.isActive) {
+        continue;
+      }
+
+      const fs = freshnessScoreFrom(spa);
+
       const key = normalizeTitleKey(c.title);
       const existingId = existingByKey.get(key) ?? null;
       if (existingId) {
@@ -256,6 +297,11 @@ ${research}`;
             imageQuery: c.imageQuery,
             outboundUrl: c.outboundUrl,
             confidenceScore: c.confidenceScore,
+            sourcePublishedAt: spa,
+            freshnessScore: fs,
+            isFresh: true,
+            linkStatus: 'ACTIVE' as any,
+            lastCheckedAt: now,
             source: 'MIXED' as Source as any,
             status: 'ACTIVE' as any,
             discoveredAt: now,
@@ -290,6 +336,11 @@ ${research}`;
             imageQuery: c.imageQuery,
             outboundUrl: c.outboundUrl,
             confidenceScore: c.confidenceScore,
+            sourcePublishedAt: spa,
+            freshnessScore: fs,
+            isFresh: true,
+            linkStatus: 'ACTIVE' as any,
+            lastCheckedAt: now,
             source: 'MIXED' as Source as any,
             status: 'ACTIVE' as any,
             discoveredAt: now,

@@ -4,6 +4,7 @@ import { generateShortText } from '../ai/openai.js';
 import { deriveHeroContextFromPost, generateHeroImageDataUrl, generateShortDescription, generateThumbnailDataUrl, verifyLink } from '../enrichment/postEnrichment.js';
 import { isUnaffiliatedAutoPublishEnabled } from '../ingestion/gate.js';
 import { expireUnaffiliatedPosts } from '../maintenance/unaffiliatedPosts.js';
+import { getTodayUTC } from '../utils/time.js';
 
 function safeSlug(s: string) {
   return s
@@ -206,6 +207,9 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
   const candidates = await prisma.discoveryCandidate.findMany({
     where: {
       status: 'ACTIVE',
+      isFresh: true,
+      linkStatus: 'ACTIVE' as any,
+      discoveredAt: { gte: new Date(getTodayUTC().getTime() - 24 * 60 * 60 * 1000) },
       unaffiliatedPost: { is: null },
     },
     orderBy: [{ confidenceScore: 'desc' }, { discoveredAt: 'desc' }],

@@ -206,6 +206,9 @@ export function AdminAutomationPage() {
                 Enable Discovery (Trending Source Ingestion)
               </label>
               <div className="text-xs text-slate-500">Controls whether automated discovery sources may ingest new trend candidates.</div>
+              <div className="text-xs text-slate-500">✅ Freshness window: Last 24 hours</div>
+              <div className="text-xs text-slate-500">🕒 Timezone: UTC (locked)</div>
+              <div className="text-xs text-slate-500">🔗 Link verification: ON (fail-closed)</div>
               {!automationEnabled ? <div className="text-xs text-slate-500">Enable automation to modify discovery controls.</div> : null}
             </div>
           </div>

@@ -722,6 +722,12 @@ model DiscoveryCandidate {
   thumbnailSource String?
   linkStatus LinkStatus @default(UNKNOWN)
   lastCheckedAt DateTime?
+  // Best-effort publish timestamp from the source context (if available).
+  sourcePublishedAt DateTime?
+  // 0..1; best-effort freshness signal (computed).
+  freshnessScore Float?
+  // Hard gate: only fresh candidates are allowed to be stored/published.
+  isFresh Boolean @default(false)
   source          DiscoveryCandidateSource
   status          DiscoveryCandidateStatus   @default(ACTIVE)
   discoveredAt    DateTime                   @default(now())
@@ -740,6 +746,7 @@ model DiscoveryCandidate {
   @@index([retailer, discoveredAt])
   @@index([expiresAt])
   @@index([confidenceScore])
+  @@index([isFresh])
 }
 
 model ClickEvent {
