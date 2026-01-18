@@ -1,6 +1,7 @@
 import { prisma } from '@trendsinusa/db';
 import type { DiscoveryCandidateRetailer } from '@prisma/client';
 import { generateShortText } from '../ai/openai.js';
+import { generateShortDescription, generateThumbnailDataUrl, verifyLink } from '../enrichment/postEnrichment.js';
 import { isUnaffiliatedAutoPublishEnabled } from '../ingestion/gate.js';
 import { expireUnaffiliatedPosts } from '../maintenance/unaffiliatedPosts.js';
 
@@ -105,6 +106,47 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
   // Expire old posts opportunistically each run (kept for audit).
   const expired = await expireUnaffiliatedPosts(now);
 
+  // Best-effort backfill for existing published posts missing enrichment.
+  // (Bounded; must not block publishing.)
+  const postsToBackfill = await prisma.unaffiliatedPost
+    .findMany({
+      where: {
+        status: 'PUBLISHED',
+        OR: [{ shortDescription: null }, { thumbnailUrl: null }, { AND: [{ linkStatus: 'UNKNOWN' as any }, { lastCheckedAt: null }] }],
+      },
+      orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 5,
+      select: { id: true, title: true, retailer: true, category: true, summary: true, outboundUrl: true, shortDescription: true, thumbnailUrl: true, linkStatus: true, lastCheckedAt: true },
+    })
+    .catch(() => [] as any[]);
+  for (const p of postsToBackfill) {
+    try {
+      const patch: any = {};
+      if (!p.shortDescription) {
+        const fromSummary = p.summary ? String(p.summary).split(/[.!?]\s/)[0]?.trim() : '';
+        const maybe = fromSummary ? fromSummary.split(/\s+/).slice(0, 20).join(' ') : '';
+        const ai = maybe ? maybe : await generateShortDescription({ title: p.title, category: p.category ?? 'General', retailer: String(p.retailer) });
+        if (ai) patch.shortDescription = ai;
+      }
+      if (!p.thumbnailUrl) {
+        const t = await generateThumbnailDataUrl({ title: p.title, category: p.category ?? null });
+        patch.thumbnailUrl = t.url;
+        patch.thumbnailGeneratedAt = new Date();
+        patch.thumbnailSource = t.source;
+      }
+      if (p.linkStatus === 'UNKNOWN' && !p.lastCheckedAt) {
+        const r = await verifyLink(p.outboundUrl);
+        patch.linkStatus = r.status;
+        patch.lastCheckedAt = new Date();
+      }
+      if (Object.keys(patch).length) {
+        await prisma.unaffiliatedPost.update({ where: { id: p.id }, data: patch });
+      }
+    } catch {
+      // swallow; publishing must remain non-blocking
+    }
+  }
+
   // Post TTL: clamp to 30..60 days (default 45).
   const ttlRaw = Number(process.env.UNAFFILIATED_POST_TTL_DAYS ?? 45);
   const ttlDays = Number.isFinite(ttlRaw) ? Math.max(30, Math.min(60, Math.trunc(ttlRaw))) : 45;
@@ -117,7 +159,23 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
     },
     orderBy: [{ confidenceScore: 'desc' }, { discoveredAt: 'desc' }],
     take: limit,
-    select: { id: true, title: true, retailer: true, category: true, description: true, outboundUrl: true, discoveredAt: true, expiresAt: true, confidenceScore: true },
+    select: {
+      id: true,
+      title: true,
+      retailer: true,
+      category: true,
+      description: true,
+      outboundUrl: true,
+      discoveredAt: true,
+      expiresAt: true,
+      confidenceScore: true,
+      shortDescription: true,
+      thumbnailUrl: true,
+      thumbnailGeneratedAt: true,
+      thumbnailSource: true,
+      linkStatus: true,
+      lastCheckedAt: true,
+    },
   });
   if (candidates.length === 0) return { ok: true as const, skipped: true as const, reason: 'no_candidates', expired };
 
@@ -128,6 +186,22 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
     try {
       const retailer = c.retailer as DiscoveryCandidateRetailer;
       const category = c.category ?? 'General';
+      const shortDescription =
+        c.shortDescription ??
+        (c.description ? c.description.split(/[.!?]\s/)[0]?.trim().split(/\s+/).slice(0, 20).join(' ') : null) ??
+        (await generateShortDescription({ title: c.title, category, retailer: String(retailer) }));
+
+      // Best-effort thumbnail; prefer cached candidate thumbnail, otherwise generate now.
+      const thumb: { url: string; source: 'ai' | 'fallback' } =
+        c.thumbnailUrl != null
+          ? { url: c.thumbnailUrl, source: c.thumbnailSource === 'ai' ? 'ai' : 'fallback' }
+          : await generateThumbnailDataUrl({ title: c.title, category: c.category ?? null });
+
+      // Best-effort link verification (must not block publishing). Only check if never checked.
+      const link =
+        c.lastCheckedAt == null && c.linkStatus === 'UNKNOWN'
+          ? await verifyLink(c.outboundUrl)
+          : { status: c.linkStatus as any, httpStatus: null as number | null };
 
       const system = `You write neutral, informational posts about trending products.
 Rules:
@@ -194,6 +268,12 @@ Keep it short and SEO-safe.`;
             body,
             imageSetId: intent?.id ?? null,
             outboundUrl: c.outboundUrl,
+            shortDescription: shortDescription ?? null,
+            thumbnailUrl: thumb.url,
+            thumbnailGeneratedAt: new Date(),
+            thumbnailSource: thumb.source,
+            linkStatus: link.status,
+            lastCheckedAt: c.lastCheckedAt ?? new Date(),
             source: 'AI_ENRICHED',
             status: 'PUBLISHED',
             publishedAt: now,

@@ -20,6 +20,10 @@ function retailerLabel(r: DiscoveryCandidatePublic['retailer']) {
   return r.charAt(0) + r.slice(1).toLowerCase();
 }
 
+function isDead(linkStatus: any) {
+  return String(linkStatus ?? '').toUpperCase() === 'DEAD';
+}
+
 export function HomePage() {
   const name = siteConfig.branding.name;
 
@@ -106,13 +110,18 @@ export function HomePage() {
                 <ul className="mt-2 space-y-2">
                   {(grouped.entries[0]?.items ?? []).slice(0, 3).map((c) => (
                     <li key={c.id} className="text-xs">
-                      <a className="font-medium text-slate-900 hover:underline" href={c.outboundUrl} target="_blank" rel="noreferrer">
-                        {c.title}
-                      </a>
+                      {!isDead((c as any).linkStatus) ? (
+                        <a className="font-medium text-slate-900 hover:underline" href={c.outboundUrl} target="_blank" rel="noreferrer">
+                          {c.title}
+                        </a>
+                      ) : (
+                        <span className="font-medium text-slate-500">{c.title}</span>
+                      )}
                       <div className="text-[11px] text-slate-600">
                         {retailerLabel(c.retailer)}
                         {c.category ? ` · ${c.category}` : ''} · Updated {hoursAgo(grouped.now, c.discoveredAt)}h ago
                       </div>
+                      {isDead((c as any).linkStatus) ? <div className="text-[11px] text-amber-700">Link currently unavailable</div> : null}
                     </li>
                   ))}
                 </ul>
@@ -151,11 +160,35 @@ export function HomePage() {
                   <ul className="mt-3 space-y-2 text-sm">
                     {g.items.slice(0, 10).map((c) => (
                       <li key={c.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                        <a className="font-medium text-slate-900 hover:underline" href={c.outboundUrl} target="_blank" rel="noreferrer">
-                          {c.title}
-                        </a>
-                        <div className="mt-1 text-xs text-slate-600">
-                          {c.category ? c.category : '—'} · confidence {c.confidenceScore != null ? c.confidenceScore.toFixed(2) : '—'}
+                        <div className="flex gap-3">
+                          {(c as any).thumbnailUrl ? (
+                            <img
+                              src={(c as any).thumbnailUrl}
+                              alt=""
+                              width={150}
+                              height={150}
+                              className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            {!isDead((c as any).linkStatus) ? (
+                              <a className="font-medium text-slate-900 hover:underline" href={c.outboundUrl} target="_blank" rel="noreferrer">
+                                {c.title}
+                              </a>
+                            ) : (
+                              <div className="font-medium text-slate-500">{c.title}</div>
+                            )}
+                            <div className="mt-1 text-xs text-slate-600">
+                              {(c as any).shortDescription ? (c as any).shortDescription : c.description ? c.description : '—'}
+                            </div>
+                            <div className="mt-2 text-xs text-slate-600">
+                              {c.category ? c.category : '—'} · confidence {c.confidenceScore != null ? c.confidenceScore.toFixed(2) : '—'}
+                            </div>
+                            {isDead((c as any).linkStatus) ? <div className="mt-2 text-xs text-amber-700">Link currently unavailable</div> : null}
+                          </div>
                         </div>
                       </li>
                     ))}
@@ -186,13 +219,30 @@ export function HomePage() {
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {posts.posts.map((p) => (
               <div key={p.id} className="rounded-lg border border-slate-200 bg-white p-4">
-                <Link to={`/posts/${encodeURIComponent(p.slug)}`} className="font-medium text-slate-900 hover:underline">
-                  {p.title}
-                </Link>
-                <div className="mt-1 text-xs text-slate-600">
-                  {p.retailer} · {p.category}
+                <div className="flex gap-3">
+                  {(p as any).thumbnailUrl ? (
+                    <img
+                      src={(p as any).thumbnailUrl}
+                      alt=""
+                      width={150}
+                      height={150}
+                      className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <Link to={`/posts/${encodeURIComponent(p.slug)}`} className="font-medium text-slate-900 hover:underline">
+                      {p.title}
+                    </Link>
+                    <div className="mt-1 text-xs text-slate-600">
+                      {p.retailer} · {p.category}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-600">{(p as any).shortDescription ?? '—'}</div>
+                    <div className="mt-3 text-sm text-slate-700">{p.summary}</div>
+                  </div>
                 </div>
-                <div className="mt-3 text-sm text-slate-700">{p.summary}</div>
               </div>
             ))}
           </div>

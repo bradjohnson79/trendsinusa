@@ -6,6 +6,10 @@ import { api, ApiClientError } from '@/lib/api';
 import { setSeo } from '@/lib/seo';
 import { siteConfig } from '@/sites/config';
 
+function isDead(linkStatus: any) {
+  return String(linkStatus ?? '').toUpperCase() === 'DEAD';
+}
+
 function renderMarkdownLite(md: string) {
   // Minimal, safe-ish renderer to avoid adding deps. Supports headings and paragraphs.
   // NOTE: This intentionally does NOT render arbitrary HTML.
@@ -108,9 +112,16 @@ export function PostPage() {
 
           <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
             <div className="text-xs font-medium text-slate-900">View on retailer site</div>
-            <a href={post.outboundUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-slate-700 hover:underline break-all">
-              {post.outboundUrl}
-            </a>
+            {!isDead((post as any).linkStatus) ? (
+              <a href={post.outboundUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-slate-700 hover:underline break-all">
+                {post.outboundUrl}
+              </a>
+            ) : (
+              <div className="mt-2 text-amber-700">
+                Link currently unavailable
+                <div className="mt-1 text-xs text-slate-600 break-all">{post.outboundUrl}</div>
+              </div>
+            )}
           </div>
         </article>
       )}

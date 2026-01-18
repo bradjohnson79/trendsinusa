@@ -6,6 +6,10 @@ import { api, ApiClientError } from '@/lib/api';
 import { setSeo } from '@/lib/seo';
 import { siteConfig } from '@/sites/config';
 
+function isDead(linkStatus: any) {
+  return String(linkStatus ?? '').toUpperCase() === 'DEAD';
+}
+
 export function PostCategoryPage() {
   const params = useParams();
   const category = params.category ? decodeURIComponent(params.category) : '';
@@ -69,17 +73,38 @@ export function PostCategoryPage() {
           <div className="text-xs text-slate-500">Retailers: {retailers.join(', ') || '—'}</div>
           {posts.map((p: UnaffiliatedPostPublic) => (
             <div key={p.id} className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <Link to={`/posts/${encodeURIComponent(p.slug)}`} className="font-medium text-slate-900 hover:underline">
-                  {p.title}
-                </Link>
-                <div className="text-xs text-slate-500">{p.retailer}</div>
-              </div>
-              <div className="mt-3 text-sm text-slate-700">{p.summary}</div>
-              <div className="mt-3 text-xs text-slate-600">
-                <a href={p.outboundUrl} target="_blank" rel="noreferrer" className="hover:underline">
-                  View on retailer site
-                </a>
+              <div className="flex gap-3">
+                {(p as any).thumbnailUrl ? (
+                  <img
+                    src={(p as any).thumbnailUrl}
+                    alt=""
+                    width={150}
+                    height={150}
+                    className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <Link to={`/posts/${encodeURIComponent(p.slug)}`} className="font-medium text-slate-900 hover:underline">
+                      {p.title}
+                    </Link>
+                    <div className="text-xs text-slate-500">{p.retailer}</div>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-600">{(p as any).shortDescription ?? '—'}</div>
+                  <div className="mt-3 text-sm text-slate-700">{p.summary}</div>
+                  <div className="mt-3 text-xs">
+                    {!isDead((p as any).linkStatus) ? (
+                      <a href={p.outboundUrl} target="_blank" rel="noreferrer" className="text-slate-600 hover:underline">
+                        View on retailer site
+                      </a>
+                    ) : (
+                      <span className="text-amber-700">Link currently unavailable</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           ))}

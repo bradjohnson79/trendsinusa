@@ -4,6 +4,7 @@ import { getSiteByKey } from '@trendsinusa/shared/server';
 
 import { generateShortText } from '../ai/openai.js';
 import { perplexityResearch } from '../ai/perplexity.js';
+import { generateShortDescription, generateThumbnailDataUrl, verifyLink } from '../enrichment/postEnrichment.js';
 import { ensurePostingItemForDiscovery } from '../posting/lifecycle.js';
 
 const PROMPT_VERSION = 'discovery-sweep-v1';
@@ -314,6 +315,84 @@ ${research}`;
     where: { status: 'ACTIVE', expiresAt: { not: null, lt: now } },
     data: { status: 'STALE' as any },
   });
+
+  // 5) Best-effort enrichment (non-blocking callers; bounded work)
+  // - shortDescription (1 sentence, max 20 words)
+  // - thumbnailUrl (150x150, AI attempt with fallback)
+  // - linkStatus (HEAD/GET with timeout)
+  const idsToEnrich = Array.from(new Set([...created, ...updated])).slice(0, 30);
+  const backfill = await prisma.discoveryCandidate
+    .findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [{ shortDescription: null }, { thumbnailUrl: null }, { AND: [{ linkStatus: 'UNKNOWN' as any }, { lastCheckedAt: null }] }],
+      },
+      orderBy: { discoveredAt: 'desc' },
+      take: 10,
+      select: { id: true },
+    })
+    .catch(() => [] as Array<{ id: string }>);
+  const moreIds = backfill.map((r) => r.id);
+  const allToEnrich = Array.from(new Set([...idsToEnrich, ...moreIds])).slice(0, 30);
+
+  for (const id of allToEnrich) {
+    try {
+      const row = await prisma.discoveryCandidate
+        .findUnique({
+          where: { id },
+          select: {
+            id: true,
+            title: true,
+            retailer: true,
+            category: true,
+            description: true,
+            outboundUrl: true,
+            shortDescription: true,
+            thumbnailUrl: true,
+            linkStatus: true,
+            lastCheckedAt: true,
+          },
+        })
+        .catch(() => null);
+      if (!row) continue;
+
+      const patch: any = {};
+
+      if (!row.shortDescription) {
+        // Prefer an existing description if present; keep it short and neutral.
+        const fromDesc = row.description ? row.description.split(/[.!?]\s/)[0]?.trim() : '';
+        const maybe = fromDesc ? fromDesc.split(/\s+/).slice(0, 20).join(' ') : '';
+        const ai = maybe
+          ? maybe
+          : await generateShortDescription({
+              title: row.title,
+              category: row.category ?? 'General',
+              retailer: String(row.retailer),
+            });
+        if (ai) patch.shortDescription = ai;
+      }
+
+      if (!row.thumbnailUrl) {
+        const t = await generateThumbnailDataUrl({ title: row.title, category: row.category ?? null });
+        patch.thumbnailUrl = t.url;
+        patch.thumbnailGeneratedAt = new Date();
+        patch.thumbnailSource = t.source;
+      }
+
+      if (row.linkStatus === 'UNKNOWN' && !row.lastCheckedAt) {
+        const r = await verifyLink(row.outboundUrl);
+        patch.linkStatus = r.status;
+        patch.lastCheckedAt = new Date();
+      }
+
+      if (Object.keys(patch).length) {
+        await prisma.discoveryCandidate.update({ where: { id: row.id }, data: patch });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`enrich_failed:${id}:${msg}`);
+    }
+  }
 
   // Minimal audit marker (non-commercial)
   await prisma.systemAlert

@@ -163,6 +163,12 @@ enum UnaffiliatedPostStatus {
   EXPIRED
 }
 
+enum LinkStatus {
+  ACTIVE
+  DEAD
+  UNKNOWN
+}
+
 model AutomationGate {
   id                String   @id @default(cuid())
   siteKey            String   @unique
@@ -256,6 +262,12 @@ model UnaffiliatedPost {
   body       String                    @db.Text
   imageSetId String?
   outboundUrl String
+  shortDescription String?
+  thumbnailUrl String?
+  thumbnailGeneratedAt DateTime?
+  thumbnailSource String?
+  linkStatus LinkStatus @default(UNKNOWN)
+  lastCheckedAt DateTime?
   source     UnaffiliatedPostSource
   status     UnaffiliatedPostStatus    @default(DRAFT)
   publishedAt DateTime?
@@ -696,6 +708,12 @@ model DiscoveryCandidate {
   imageQuery      String?
   outboundUrl     String
   confidenceScore Float?
+  shortDescription String?
+  thumbnailUrl String?
+  thumbnailGeneratedAt DateTime?
+  thumbnailSource String?
+  linkStatus LinkStatus @default(UNKNOWN)
+  lastCheckedAt DateTime?
   source          DiscoveryCandidateSource
   status          DiscoveryCandidateStatus   @default(ACTIVE)
   discoveredAt    DateTime                   @default(now())
