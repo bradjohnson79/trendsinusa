@@ -1,7 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
     "target": "ES2022",
     "lib": [
       "DOM",
@@ -9,31 +8,31 @@
       "ES2022"
     ],
     "strict": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "noEmit": true,
     "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "./*"
-      ]
+        "./src/*"
+      ],
+      "@sites/*": ["../../sites/*"],
+      "@trendsinusa/db": ["./src/__forbidden__/db"],
+      "@trendsinusa/worker": ["./src/__forbidden__/worker"],
+      "@prisma/client": ["./src/__forbidden__/prisma-client"]
     },
+    "types": ["vite/client"],
     "allowJs": false
   },
   "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
+    "vite.config.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx"
   ],
   "exclude": [
+    "dist",
     "node_modules"
   ]
 }

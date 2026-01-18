@@ -53,15 +53,16 @@ const serverEnvSchema = z.object({
 });
 
 const clientEnvSchema = z.object({
-  NEXT_PUBLIC_SITE_URL: z.preprocess(emptyToUndefined, z.string().url().default('http://localhost:3005')),
-  NEXT_PUBLIC_SITE_KEY: z.string().default('trendsinusa'),
-  NEXT_PUBLIC_APP_ENV: z.enum(['development', 'staging', 'production']).default('development'),
+  SITE_URL: z.preprocess(emptyToUndefined, z.string().url().default('http://localhost:3005')),
+  SITE_KEY: z.string().default('trendsinusa'),
+  APP_ENV: z.enum(['development', 'staging', 'production']).default('development'),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
 export type ClientEnv = z.infer<typeof clientEnvSchema>;
 
-function isNextBuildPhase(env: NodeJS.ProcessEnv): boolean {
+function isBuildPhase(env: NodeJS.ProcessEnv): boolean {
+  // Back-compat: some platforms set NEXT_PHASE=phase-production-build for build-time.
   return env.NEXT_PHASE === 'phase-production-build';
 }
 
@@ -87,20 +88,21 @@ export function getRuntimeEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
 }
 
 // Back-compat: most of the codebase calls `getServerEnv()`.
-// During `next build`, we intentionally relax runtime-secret requirements.
+// During static build steps, we intentionally relax runtime-secret requirements.
 export function getServerEnv(env: NodeJS.ProcessEnv = process.env): ServerEnv {
-  return isNextBuildPhase(env) ? getBuildEnv(env) : getRuntimeEnv(env);
+  return isBuildPhase(env) ? getBuildEnv(env) : getRuntimeEnv(env);
 }
 
 export function getClientEnv(env: NodeJS.ProcessEnv = process.env): ClientEnv {
-  // Vercel convenience: if NEXT_PUBLIC_SITE_URL is not set, fall back to VERCEL_URL.
-  // This keeps build-time routes (robots/sitemap) from failing closed on a missing env var,
-  // while still requiring a valid URL overall.
+  // Build/runtime convenience: fall back to provider-specific vars, but return a stable shape.
   const withFallback: NodeJS.ProcessEnv = { ...env };
-  if (!withFallback.NEXT_PUBLIC_SITE_URL) {
-    const vercelUrl = env.VERCEL_URL;
-    if (vercelUrl) withFallback.NEXT_PUBLIC_SITE_URL = `https://${vercelUrl}`;
-  }
+  // Back-compat: allow legacy public env var names to map into the new client env keys.
+  if (!withFallback.SITE_URL && withFallback.NEXT_PUBLIC_SITE_URL) withFallback.SITE_URL = withFallback.NEXT_PUBLIC_SITE_URL;
+  if (!withFallback.SITE_KEY && withFallback.NEXT_PUBLIC_SITE_KEY) withFallback.SITE_KEY = withFallback.NEXT_PUBLIC_SITE_KEY;
+  if (!withFallback.APP_ENV && withFallback.NEXT_PUBLIC_APP_ENV) withFallback.APP_ENV = withFallback.NEXT_PUBLIC_APP_ENV;
+
+  const vercelUrl = env.VERCEL_URL;
+  if (!withFallback.SITE_URL && vercelUrl) withFallback.SITE_URL = `https://${vercelUrl}`;
 
   const parsed = clientEnvSchema.safeParse(withFallback);
   if (!parsed.success) {

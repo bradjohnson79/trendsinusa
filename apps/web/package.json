@@ -3,30 +3,29 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "dev": "dotenv -e ../../.env -- next dev -p 3005",
-    "build": "next build",
-    "start": "next start -p 3005",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "dev": "vite --port 3006 --strictPort",
+    "build": "vite build",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "preview": "vite preview --port 3006 --strictPort",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@trendsinusa/db": "workspace:*",
     "@trendsinusa/shared": "workspace:*",
-    "@prisma/client": "^6.2.0",
-    "next": "^15.1.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.5"
   },
   "devDependencies": {
     "@types/node": "^20.17.14",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "autoprefixer": "^10.4.20",
-    "dotenv-cli": "^8.0.0",
     "eslint": "^8.57.1",
-    "eslint-config-next": "^15.1.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
+    "vite": "^6.0.0",
+    "vite-tsconfig-paths": "^5.1.4",
     "typescript": "^5.7.3"
   }
 }

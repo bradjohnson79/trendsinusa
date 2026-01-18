@@ -1,5 +1,5 @@
 import { prisma } from '@trendsinusa/db';
-import { getSiteByKey } from '@trendsinusa/shared';
+import { getSiteByKey } from '@trendsinusa/shared/server';
 import { createHash } from 'node:crypto';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';

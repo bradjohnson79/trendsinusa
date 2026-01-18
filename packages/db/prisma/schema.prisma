@@ -124,9 +124,176 @@ enum ClickKind {
   AFFILIATE_OUTBOUND
 }
 
+enum DiscoveryCandidateRetailer {
+  AMAZON
+  WALMART
+  TARGET
+  BEST_BUY
+}
+
+enum DiscoveryCandidateSource {
+  PERPLEXITY
+  OPENAI
+  MIXED
+}
+
+enum DiscoveryCandidateStatus {
+  ACTIVE
+  STALE
+  REMOVED
+}
+
+enum PostingLifecycleState {
+  DISCOVERY
+  INGESTED
+  ENRICHED
+  IMAGED
+  READY
+  PUBLISHED
+}
+
+enum UnaffiliatedPostSource {
+  DISCOVERY
+  AI_ENRICHED
+}
+
+enum UnaffiliatedPostStatus {
+  DRAFT
+  PUBLISHED
+  EXPIRED
+}
+
+model AutomationGate {
+  id                String   @id @default(cuid())
+  siteKey            String   @unique
+  ingestionEnabled   Boolean  @default(false)
+  autoPublishEnabled Boolean  @default(false)
+  unaffiliatedAutoPublishEnabled Boolean @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([ingestionEnabled])
+  @@index([autoPublishEnabled])
+  @@index([unaffiliatedAutoPublishEnabled])
+}
+
+model AutomationSchedule {
+  id              String           @id @default(cuid())
+  siteKey          String           @default("trendsinusa")
+  jobType          SystemCommandType
+  enabled          Boolean          @default(false)
+  cron             String
+  timezone         String           @default("UTC")
+  lastScheduledAt  DateTime?
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([siteKey, jobType])
+  @@index([siteKey, enabled])
+  @@index([jobType, enabled])
+}
+
+model ProviderConfig {
+  id        String            @id @default(cuid())
+  siteKey   String            @default("trendsinusa")
+  provider  IngestionProvider
+  enabled   Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([siteKey, provider])
+  @@index([siteKey, enabled])
+  @@index([provider, enabled])
+}
+
+model PostingItem {
+  id                 String                 @id @default(cuid())
+  state              PostingLifecycleState  @default(DISCOVERY)
+
+  // Linkage (one-to-one once upgraded). Starts with discoveryCandidateId, later gets productId.
+  discoveryCandidateId String?  @unique
+  discoveryCandidate   DiscoveryCandidate?  @relation(fields: [discoveryCandidateId], references: [id], onDelete: SetNull)
+
+  productId           String?   @unique
+  product             Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  // Preserved discovery fields
+  retailer            DiscoveryCandidateRetailer
+  category            String?
+  confidenceScore     Float?
+  discoveredAt        DateTime
+
+  // State timestamps (explicit transitions)
+  ingestedAt          DateTime?
+  enrichedAt          DateTime?
+  imagedAt            DateTime?
+  readyAt             DateTime?
+  publishedAt         DateTime?
+
+  // Publishing gates
+  approved            Boolean  @default(false)
+  approvedAt          DateTime?
+  approvedBy          String?
+  policyEligible      Boolean  @default(false)
+  policyReason        String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([state, discoveredAt])
+  @@index([retailer, discoveredAt])
+  @@index([approved, policyEligible])
+}
+
+model UnaffiliatedPost {
+  id         String                    @id @default(cuid())
+  title      String
+  slug       String                    @unique
+  retailer   DiscoveryCandidateRetailer
+  category   String
+  summary    String                    @db.Text
+  body       String                    @db.Text
+  imageSetId String?
+  outboundUrl String
+  source     UnaffiliatedPostSource
+  status     UnaffiliatedPostStatus    @default(DRAFT)
+  publishedAt DateTime?
+  expiresAt   DateTime?
+
+  discoveryCandidateId String?
+  discoveryCandidate   DiscoveryCandidate?     @relation(fields: [discoveryCandidateId], references: [id], onDelete: SetNull)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([discoveryCandidateId])
+  @@index([status, publishedAt])
+  @@index([retailer, category])
+}
+
+enum ImageIntentEntityType {
+  DISCOVERY_CANDIDATE
+  RETAIL_PRODUCT
+}
+
+enum ImageIntentImageType {
+  CARD
+  HERO
+  OG
+}
+
+enum ImageIntentStatus {
+  PENDING
+  GENERATED
+  FAILED
+}
+
 enum SystemCommandType {
   AMAZON_PRODUCTS_REFRESH
   AMAZON_DEALS_REFRESH
+  DISCOVERY_SWEEP
+  UNAFFILIATED_PUBLISHER
 }
 
 enum PlacementType {
@@ -134,6 +301,21 @@ enum PlacementType {
   EDITORS_PICK
   SPOTLIGHT
   SPONSORED
+}
+
+model Site {
+  id           String   @id @default(cuid())
+  // Country/site code (US, CA, UK, AU, etc.)
+  code         String   @unique
+  domain       String
+  enabled      Boolean  @default(false)
+  currency     String
+  affiliateTag String
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([enabled])
 }
 
 model Product {
@@ -163,6 +345,15 @@ model Product {
   aiConfidenceScore   Float?
   aiLastGeneratedAt   DateTime?
   aiDisabled          Boolean  @default(false)
+
+  // Discovery provenance (non-commercial). Set when a DiscoveryCandidate is upgraded to this Product.
+  discoveryCandidateId     String?  @unique
+  discoveryDiscoveredAt    DateTime?
+  discoveryConfidenceScore Float?
+  discoveryCategory        String?
+
+  // Posting lifecycle linkage (one-to-one, optional)
+  postingItem       PostingItem?
 
   deals            Deal[]
   clickEvents      ClickEvent[]
@@ -403,6 +594,7 @@ model AutomationConfig {
   id                 String   @id @default(cuid())
   siteKey            String   @unique
 
+  automationEnabled  Boolean  @default(false)
   imageGenEnabled    Boolean  @default(false)
   heroRegenerateAt   DateTime?
   categoryRegenerateAt DateTime?
@@ -411,6 +603,7 @@ model AutomationConfig {
   updatedAt          DateTime @updatedAt
 
   @@index([imageGenEnabled])
+  @@index([automationEnabled])
 }
 
 model HeroRotation {
@@ -478,6 +671,47 @@ model SystemAlert {
 
   @@index([noisy, createdAt])
   @@index([resolvedAt])
+}
+
+model ImageIntent {
+  id         String               @id @default(cuid())
+  entityType ImageIntentEntityType
+  entityId   String
+  imageType  ImageIntentImageType
+  status     ImageIntentStatus    @default(PENDING)
+  createdAt  DateTime             @default(now())
+
+  @@index([status, createdAt])
+  @@index([entityType, entityId, imageType])
+}
+
+model DiscoveryCandidate {
+  id              String                     @id @default(cuid())
+  title           String
+  retailer        DiscoveryCandidateRetailer
+  category        String?
+  description     String?
+  imageQuery      String?
+  outboundUrl     String
+  confidenceScore Float?
+  source          DiscoveryCandidateSource
+  status          DiscoveryCandidateStatus   @default(ACTIVE)
+  discoveredAt    DateTime                   @default(now())
+  expiresAt       DateTime?
+
+  // Set when upgraded to a real Product (RetailProduct). Candidate should then move to REMOVED.
+  upgradedProductId String?
+
+  // Posting lifecycle linkage (one-to-one, optional)
+  postingItem       PostingItem?
+
+  // Unaffiliated publishing linkage (one-to-one, optional)
+  unaffiliatedPost  UnaffiliatedPost?
+
+  @@index([status, discoveredAt])
+  @@index([retailer, discoveredAt])
+  @@index([expiresAt])
+  @@index([confidenceScore])
 }
 
 model ClickEvent {

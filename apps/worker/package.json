@@ -11,9 +11,13 @@
     "run:daily": "dotenv -e ../../.env -- tsx src/scheduler/daily.ts",
     "run:amazon:products": "dotenv -e ../../.env -- tsx src/scheduler/amazonProducts.ts",
     "run:amazon:deals": "dotenv -e ../../.env -- tsx src/scheduler/amazonDeals.ts",
+    "run:discovery": "dotenv -e ../../.env -- tsx src/scheduler/discovery.ts",
+    "run:unaffiliated-posts": "dotenv -e ../../.env -- tsx src/scheduler/unaffiliatedPosts.ts",
+    "run:unaffiliated-publisher": "dotenv -e ../../.env -- tsx src/scheduler/unaffiliatedPublisher.ts",
     "run:ai:hero-image": "dotenv -e ../../.env -- tsx src/scheduler/generateHeroImage.ts",
     "run:ai:category-images": "dotenv -e ../../.env -- tsx src/scheduler/generateCategoryImages.ts",
     "run:ai:product-enrichment": "dotenv -e ../../.env -- tsx src/scheduler/productEnrichment.ts",
+    "run:images:process-pending": "dotenv -e ../../.env -- tsx src/images/processPending.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint ."
   },

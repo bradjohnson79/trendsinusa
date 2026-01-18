@@ -4,17 +4,37 @@ node_modules
 dist
 .DS_Store
 
+# Vercel
+.vercel
+**/.vercel
+**/.vercel/**
+
+# TypeScript build artifacts
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Local caches / coverage
+.eslintcache
+coverage
+**/coverage
+.cache
+**/.cache
+.vite
+**/.vite
+tmp
+temp
+**/tmp
+**/temp
+
 # Env files (never commit)
 .env
 .env.*
 .env.local
 .env.*.local
-.env.example
 **/.env
 **/.env.*
 **/.env.local
 **/.env.*.local
-**/.env.example
 
 pnpm-debug.log*
 npm-debug.log*

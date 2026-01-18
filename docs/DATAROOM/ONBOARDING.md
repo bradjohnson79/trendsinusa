@@ -45,7 +45,7 @@ Web runs on `localhost:3005` (per web app config).
 - Worker job `apps/worker/src/sites/router.ts` maintains these tags based on config defaults
 
 3) Select active site
-- Public runtime selection: `SITE_KEY` env (server) + `NEXT_PUBLIC_SITE_KEY` (client)
+- Public runtime selection: `SITE_KEY` env (server) + `SITE_KEY` (client)
 
 ## Operational responsibilities
 

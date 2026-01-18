@@ -1,5 +1,5 @@
-import type { SiteConfig } from '@trendsinusa/shared';
-import { readSitesConfig } from '@trendsinusa/shared';
+import type { SiteConfig } from '@trendsinusa/shared/server';
+import { readSitesConfig } from '@trendsinusa/shared/server';
 import { prisma } from '@trendsinusa/db';
 
 function siteTag(key: string) {

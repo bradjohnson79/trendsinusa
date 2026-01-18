@@ -3,6 +3,10 @@ import type { DealStatus, IngestionProvider, IngestionSource } from '@prisma/cli
 import { fetchProductWithOfferByASIN, fetchProductsWithOfferByCategory } from '../amazon/paapi.js';
 import { createHash } from 'node:crypto';
 
+import { requireIngestionEnabled } from '../ingestion/gate.js';
+import { requireProviderEnabledAndReady } from '../providers/status.js';
+import { upgradeDiscoveryCandidatesToRetailProducts } from '../discovery/upgrade.js';
+
 function sha256Hex(s: string) {
   return createHash('sha256').update(s, 'utf8').digest('hex');
 }
@@ -35,6 +39,8 @@ export async function runAmazonDealDetection(params: {
   source?: IngestionSource;
   provider?: IngestionProvider;
 }) {
+  await requireIngestionEnabled({ siteKey: 'trendsinusa' });
+  await requireProviderEnabledAndReady({ siteKey: 'trendsinusa', provider: 'AMAZON' });
   const now = new Date();
   const asins = uniqTrim(params.asins).map((a) => a.toUpperCase());
   const keywords = uniqTrim(params.keywords);
@@ -268,6 +274,10 @@ export async function runAmazonDealDetection(params: {
     dealsUpserted += 1;
   }
 
+  // Upgrade any matching DiscoveryCandidate -> Product (non-commercial; no affiliate links).
+  // Safe no-op if nothing matches.
+  const upgraded = await upgradeDiscoveryCandidatesToRetailProducts({ provider: 'AMAZON', limit: 200 }).catch(() => ({ ok: true as const, upgraded: 0, skipped: 0 }));
+
   return {
     source,
     provider,
@@ -277,6 +287,7 @@ export async function runAmazonDealDetection(params: {
     dealsUpserted,
     dealsExpired,
     skippedNoPrice,
+    discoveryUpgraded: upgraded,
   };
 }
 

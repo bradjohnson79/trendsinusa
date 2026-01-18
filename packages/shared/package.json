@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -10,6 +11,21 @@
       "default": "./dist/index.js",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./server": {
+      "default": "./dist/server.js",
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./api": {
+      "default": "./dist/api.js",
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js"
+    },
+    "./browser": {
+      "default": "./dist/browser.js",
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
     }
   },
   "scripts": {

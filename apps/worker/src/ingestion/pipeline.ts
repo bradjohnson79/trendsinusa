@@ -2,6 +2,9 @@ import type { DealStatus, IngestionSource } from '@prisma/client';
 import { prisma } from '@trendsinusa/db';
 import type { IngestedDeal, IngestedProduct } from '@trendsinusa/shared';
 
+import { requireIngestionEnabled } from './gate.js';
+import { upgradeDiscoveryCandidatesToRetailProducts } from '../discovery/upgrade.js';
+
 function toCents(amount: number): number {
   return Math.round(amount * 100);
 }
@@ -38,6 +41,16 @@ export async function runIngestion(params: {
   });
 
   try {
+    // Global kill switch: ingestion is fail-closed by default.
+    await requireIngestionEnabled({ siteKey: 'trendsinusa' });
+
+    // Safety rail: ingestion must not run without at least one enabled site configured.
+    // This fails gracefully (records the run failure) and does NOT seed automatically.
+    const enabledSites = await prisma.site.count({ where: { enabled: true } });
+    if (enabledSites < 1) {
+      throw new Error('No enabled site configured. Create and enable at least one site in Admin → Sites.');
+    }
+
     const now = new Date();
 
     // 1) Upsert products
@@ -65,6 +78,13 @@ export async function runIngestion(params: {
         select: { id: true, asin: true },
       });
       productByExternalId.set(p.externalId, row);
+    }
+
+    // Upgrade any matching DiscoveryCandidate -> Product after new products exist.
+    // NOTE: runIngestion does not currently carry provider info; Product.ingestionProvider defaults to AMAZON.
+    // To avoid upgrading from seed/manual ingestion, we only attempt upgrades for non-MANUAL sources.
+    if (params.source !== 'MANUAL') {
+      await upgradeDiscoveryCandidatesToRetailProducts({ provider: 'AMAZON', limit: 200 }).catch(() => null);
     }
 
     // 2) Upsert deals (idempotent by unique externalKey)

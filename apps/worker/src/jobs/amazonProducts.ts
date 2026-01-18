@@ -3,6 +3,10 @@ import type { IngestionSource } from '@prisma/client';
 import { fetchProductByASIN, fetchProductsByCategory } from '../amazon/paapi.js';
 import { createHash } from 'node:crypto';
 
+import { requireIngestionEnabled } from '../ingestion/gate.js';
+import { requireProviderEnabledAndReady } from '../providers/status.js';
+import { upgradeDiscoveryCandidatesToRetailProducts } from '../discovery/upgrade.js';
+
 function uniqTrim(list: string[]) {
   return Array.from(new Set(list.map((s) => s.trim()).filter(Boolean)));
 }
@@ -13,6 +17,8 @@ export async function runAmazonProductIngestion(params: {
   limitPerKeyword: number;
   source?: IngestionSource;
 }) {
+  await requireIngestionEnabled({ siteKey: 'trendsinusa' });
+  await requireProviderEnabledAndReady({ siteKey: 'trendsinusa', provider: 'AMAZON' });
   const now = new Date();
   const asins = uniqTrim(params.asins).map((a) => a.toUpperCase());
   const keywords = uniqTrim(params.keywords);
@@ -120,11 +126,15 @@ export async function runAmazonProductIngestion(params: {
     upserted += 1;
   }
 
+  // Upgrade any matching DiscoveryCandidate -> Product (non-commercial; no affiliate links).
+  const upgraded = await upgradeDiscoveryCandidatesToRetailProducts({ provider: 'AMAZON', limit: 200 }).catch(() => ({ ok: true as const, upgraded: 0, skipped: 0 }));
+
   return {
     source,
     requested: { asins, keywords, limitPerKeyword: params.limitPerKeyword },
     fetched: { asinsFound: products.filter((p) => asins.includes(p.asin)).length, totalRaw: products.length },
     productsUpserted: upserted,
+    discoveryUpgraded: upgraded,
   };
 }
 

@@ -3,6 +3,7 @@ import { prisma } from '@trendsinusa/db';
 import { sha256 } from './hash.js';
 import { perplexityResearch } from './perplexity.js';
 import { generateShortText } from './openai.js';
+import { maybeAdvanceToReadyAndPublish, transitionPostingItem } from '../posting/lifecycle.js';
 
 const PROMPT_VERSION = 'automation-product-enrichment-v1';
 
@@ -301,6 +302,13 @@ Return JSON exactly (no markdown).`;
         metadata: { asin: product.asin, highlights: parsed.highlights },
       },
     });
+
+    // Posting lifecycle: INGESTED -> ENRICHED (kill switch respected inside transition helper).
+    const posting = await prisma.postingItem.findUnique({ where: { productId: product.id }, select: { id: true, state: true } }).catch(() => null);
+    if (posting && posting.state === 'INGESTED') {
+      await transitionPostingItem({ id: posting.id, to: 'ENRICHED' }).catch(() => null);
+      await maybeAdvanceToReadyAndPublish({ postingItemId: posting.id }).catch(() => null);
+    }
 
     return { skipped: false as const, confidenceScore: parsed.confidenceScore };
   } catch (e) {

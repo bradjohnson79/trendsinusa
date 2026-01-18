@@ -5,6 +5,10 @@ import { runIngestion } from '../ingestion/pipeline.js';
 import { expireDealsSweep, reEvaluateDealStates } from '../maintenance/deals.js';
 import { runAmazonProductIngestion } from '../jobs/amazonProducts.js';
 import { runAmazonDealDetection } from '../jobs/amazonDeals.js';
+import { runDiscoverySweep } from '../jobs/discoverySweep.js';
+import { runUnaffiliatedPostGeneration } from '../jobs/unaffiliatedPosts.js';
+
+import { requireIngestionEnabled } from '../ingestion/gate.js';
 
 function parseCsvEnv(key: string): string[] {
   const raw = process.env[key] ?? '';
@@ -32,6 +36,12 @@ async function processSystemCommands(now: Date) {
         result = await runAmazonProductIngestion({ asins, keywords, limitPerKeyword: Number.isFinite(limitPerKeyword) ? limitPerKeyword : 10, source: 'AMAZON_DEAL' });
       } else if (cmd.type === 'AMAZON_DEALS_REFRESH') {
         result = await runAmazonDealDetection({ asins, keywords, limitPerKeyword: Number.isFinite(limitPerKeyword) ? limitPerKeyword : 10, source: 'AMAZON_DEAL', provider: 'AMAZON' });
+      } else if (cmd.type === 'DISCOVERY_SWEEP') {
+        result = await runDiscoverySweep({ siteKey: cmd.siteKey });
+      } else if (cmd.type === 'UNAFFILIATED_PUBLISHER') {
+        const capRaw = Number(process.env.UNAFFILIATED_POSTS_LIMIT ?? 10);
+        const cap = Number.isFinite(capRaw) ? Math.max(1, Math.min(10, Math.trunc(capRaw))) : 10;
+        result = await runUnaffiliatedPostGeneration({ limit: cap });
       }
 
       await prisma.systemCommand.update({
@@ -69,6 +79,9 @@ async function main() {
     const now = new Date();
     // 0) Admin-triggered refreshes (fail-closed: if env inputs are missing, command will fail with error logged).
     await processSystemCommands(now);
+
+    // Global kill switch: prevent accidental ingestion runs.
+    await requireIngestionEnabled({ siteKey: 'trendsinusa' });
 
     // 1) Hourly ingestion refresh (seed source for now)
     const payload = await fetchSeedIngestionPayload();
