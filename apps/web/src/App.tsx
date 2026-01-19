@@ -34,12 +34,20 @@ import { TermsPage } from './routes/TermsPage';
 import { PostsPage } from './routes/PostsPage';
 import { PostPage } from './routes/PostPage';
 import { PostCategoryPage } from './routes/PostCategoryPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route index element={<HomePage />} />
+        <Route
+          index
+          element={
+            <ErrorBoundary fallback={<div className="p-6 text-sm text-slate-700">Something went wrong loading the homepage.</div>}>
+              <HomePage />
+            </ErrorBoundary>
+          }
+        />
         <Route path="/deals" element={<DealsPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/posts" element={<PostsPage />} />

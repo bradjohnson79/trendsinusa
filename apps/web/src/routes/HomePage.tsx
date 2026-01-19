@@ -28,6 +28,13 @@ function isDead(linkStatus: any) {
 export function HomePage() {
   const name = siteConfig.branding.name;
 
+  // Stable clock for countdowns/badges (updates once per second).
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const [discovery, setDiscovery] = useState<DiscoveryResponse | null>(null);
   const [discoveryErr, setDiscoveryErr] = useState<string | null>(null);
   const [posts, setPosts] = useState<UnaffiliatedPostsResponse | null>(null);
@@ -243,17 +250,17 @@ export function HomePage() {
                     <div className="mt-2 text-xs text-slate-600">{(p as any).shortDescription ?? '—'}</div>
                     {(() => {
                       const t = (p as any).lastCheckedAt ?? p.publishedAt ?? p.createdAt;
-                      const cd = countdownFromIso(p.expiresAt, new Date(now));
+                      const cd = countdownFromIso(p.expiresAt, new Date(nowMs));
                       if (!t || cd?.state === 'expired') return null;
                       const d = new Date(t);
-                      const mins = Math.max(0, Math.floor((new Date(now).getTime() - d.getTime()) / 60000));
+                      const mins = Math.max(0, Math.floor((nowMs - d.getTime()) / 60000));
                       if (mins >= 120) return null;
                       const cls = mins < 30 ? 'mt-2 text-xs font-medium text-emerald-700' : 'mt-2 text-xs text-slate-600';
-                      return <div className={cls}>Updated {relativeTimeFrom(d, new Date(now))}</div>;
+                      return <div className={cls}>Updated {relativeTimeFrom(d, new Date(nowMs))}</div>;
                     })()}
                     <div className="mt-3 text-sm text-slate-700">{p.summary}</div>
                     {(() => {
-                      const c = countdownFromIso(p.expiresAt, new Date(now));
+                      const c = countdownFromIso(p.expiresAt, new Date(nowMs));
                       if (!c) return null;
                       const cls = c.state === 'expired' ? 'mt-2 text-xs text-slate-500' : c.state === 'urgent' ? 'mt-2 text-xs text-amber-700' : 'mt-2 text-xs text-slate-600';
                       return <div className={cls}>{c.label}</div>;
