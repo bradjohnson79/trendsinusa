@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import type { UnaffiliatedPostDetailResponse } from '@trendsinusa/shared/api';
 import { api, ApiClientError } from '@/lib/api';
+import { ProductImage } from '@/components/public/ProductImage';
 import { setSeo } from '@/lib/seo';
 import { countdownFromIso, relativeTimeFrom } from '@/lib/format';
 import { siteConfig } from '@/sites/config';
@@ -113,20 +114,12 @@ export function PostPage() {
           </div>
 
           <div className="flex flex-col gap-3 md:flex-row md:items-start">
-            {(post as any).heroImageUrl ? (
-              <img
-                src={(post as any).heroImageUrl}
-                alt=""
-                width={400}
-                height={400}
-                className="h-[400px] w-[400px] rounded-lg border border-slate-200 bg-slate-50 object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="h-[400px] w-[400px] rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center">
-                <div className="text-xs text-slate-600">Image loading…</div>
-              </div>
-            )}
+            <ProductImage
+              size={400}
+              imageUrl={(post as any).heroImageUrl ?? (post as any).thumbnailUrl}
+              categoryPlaceholderUrl={(post as any).categoryPlaceholderUrl ?? null}
+              className="rounded-lg bg-slate-50"
+            />
             <div className="min-w-0 flex-1">
               <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
                 These posts are for informational purposes only. Links are non-affiliate.

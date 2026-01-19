@@ -28,17 +28,11 @@ export function relativeTimeFrom(date: Date, now = new Date()): string {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-
-export function countdownFromIso(
-  expiresAtIso: string | null | undefined,
-  now = new Date(),
-):
-  | null
-  | {
-      label: string;
-      state: 'normal' | 'urgent' | 'expired';
-      remainingMs: number;
-    } {
+export function countdownFromIso(expiresAtIso: string | null | undefined, now = new Date()): null | {
+  label: string;
+  state: 'normal' | 'urgent' | 'expired';
+  remainingMs: number;
+} {
   if (!expiresAtIso) return null;
   const exp = new Date(expiresAtIso);
   if (Number.isNaN(exp.getTime())) return null;

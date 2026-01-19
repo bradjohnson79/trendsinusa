@@ -4,6 +4,7 @@ import { URL } from 'node:url';
 
 import { prisma } from '@trendsinusa/db';
 import { readSitesConfig } from '@trendsinusa/shared/server';
+import { placeholderForCategory } from '@trendsinusa/shared';
 
 import { testDalleImageGeneration } from './diagnostics/testDalleImageGeneration.js';
 
@@ -440,6 +441,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
         retailer: r.retailer,
         category: r.category ?? null,
         description: r.description ?? null,
+        categoryPlaceholderUrl: placeholderForCategory(r.category ?? null),
         shortDescription: r.shortDescription ?? null,
         thumbnailUrl: r.thumbnailUrl ?? null,
         thumbnailGeneratedAt: r.thumbnailGeneratedAt ? r.thumbnailGeneratedAt.toISOString() : null,
@@ -516,6 +518,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
         summary: p.summary,
         discoveredAt: p.discoveredAt ? p.discoveredAt.toISOString() : p.createdAt.toISOString(),
         freshnessWindowHours: typeof p.freshnessWindowHours === 'number' ? p.freshnessWindowHours : 24,
+        categoryPlaceholderUrl: placeholderForCategory(p.category ?? null),
         shortDescription: p.shortDescription ?? null,
         thumbnailUrl: p.thumbnailUrl ?? null,
         thumbnailGeneratedAt: p.thumbnailGeneratedAt ? p.thumbnailGeneratedAt.toISOString() : null,
@@ -588,6 +591,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       body: row.body,
       discoveredAt: row.discoveredAt ? row.discoveredAt.toISOString() : row.createdAt.toISOString(),
       freshnessWindowHours: typeof (row as any).freshnessWindowHours === 'number' ? (row as any).freshnessWindowHours : 24,
+      categoryPlaceholderUrl: placeholderForCategory(row.category ?? null),
       shortDescription: row.shortDescription ?? null,
       thumbnailUrl: row.thumbnailUrl ?? null,
       thumbnailGeneratedAt: row.thumbnailGeneratedAt ? row.thumbnailGeneratedAt.toISOString() : null,

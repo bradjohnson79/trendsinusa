@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import type { UnaffiliatedPostPublic, UnaffiliatedPostsResponse } from '@trendsinusa/shared/api';
 import { api, ApiClientError } from '@/lib/api';
+import { ProductImage } from '@/components/public/ProductImage';
 import { setSeo } from '@/lib/seo';
 import { countdownFromIso, relativeTimeFrom } from '@/lib/format';
 import { siteConfig } from '@/sites/config';
@@ -75,18 +76,11 @@ export function PostCategoryPage() {
           {posts.map((p: UnaffiliatedPostPublic) => (
             <div key={p.id} className="rounded-lg border border-slate-200 bg-white p-4">
               <div className="flex gap-3">
-                {(p as any).thumbnailUrl ? (
-                  <img
-                    src={(p as any).thumbnailUrl}
-                    alt=""
-                    width={150}
-                    height={150}
-                    className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white" />
-                )}
+                <ProductImage
+                  size={150}
+                  imageUrl={(p as any).thumbnailUrl}
+                  categoryPlaceholderUrl={(p as any).categoryPlaceholderUrl ?? null}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-3">
                     <Link to={`/posts/${encodeURIComponent(p.slug)}`} className="font-medium text-slate-900 hover:underline">

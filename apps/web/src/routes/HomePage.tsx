@@ -5,6 +5,7 @@ import type { DiscoveryCandidatePublic, DiscoveryResponse, UnaffiliatedPostsResp
 import { EmptyState } from '@/components/public/EmptyState';
 import { Footer } from '@/components/public/Footer';
 import { Logo } from '@/components/public/Logo';
+import { ProductImage } from '@/components/public/ProductImage';
 import { api, ApiClientError } from '@/lib/api';
 import { countdownFromIso, relativeTimeFrom } from '@/lib/format';
 import { siteConfig } from '@/sites/config';
@@ -169,18 +170,11 @@ export function HomePage() {
                     {g.items.slice(0, 10).map((c) => (
                       <li key={c.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
                         <div className="flex gap-3">
-                          {(c as any).thumbnailUrl ? (
-                            <img
-                              src={(c as any).thumbnailUrl}
-                              alt=""
-                              width={150}
-                              height={150}
-                              className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white object-cover"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white" />
-                          )}
+                          <ProductImage
+                            size={150}
+                            imageUrl={(c as any).thumbnailUrl}
+                            categoryPlaceholderUrl={(c as any).categoryPlaceholderUrl ?? null}
+                          />
                           <div className="min-w-0 flex-1">
                             {!isDead((c as any).linkStatus) ? (
                               <a className="font-medium text-slate-900 hover:underline" href={c.outboundUrl} target="_blank" rel="noreferrer">
@@ -228,18 +222,11 @@ export function HomePage() {
             {posts.posts.map((p) => (
               <div key={p.id} className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="flex gap-3">
-                  {(p as any).thumbnailUrl ? (
-                    <img
-                      src={(p as any).thumbnailUrl}
-                      alt=""
-                      width={150}
-                      height={150}
-                      className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="h-[150px] w-[150px] rounded-md border border-slate-200 bg-white" />
-                  )}
+                  <ProductImage
+                    size={150}
+                    imageUrl={(p as any).thumbnailUrl}
+                    categoryPlaceholderUrl={(p as any).categoryPlaceholderUrl ?? null}
+                  />
                   <div className="min-w-0 flex-1">
                     <Link to={`/posts/${encodeURIComponent(p.slug)}`} className="font-medium text-slate-900 hover:underline">
                       {p.title}
