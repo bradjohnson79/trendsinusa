@@ -130,7 +130,7 @@ export function HomePage() {
                         {retailerLabel(c.retailer)}
                         {c.category ? ` · ${c.category}` : ''} · Updated {hoursAgo(grouped.now, c.discoveredAt)}h ago
                       </div>
-                      {isDead((c as any).linkStatus) ? <div className="text-[11px] text-amber-700">Link currently unavailable</div> : null}
+                      {/* Hard policy: dead links are denied upstream and never rendered here. */}
                     </li>
                   ))}
                 </ul>
@@ -189,7 +189,7 @@ export function HomePage() {
                             <div className="mt-2 text-xs text-slate-600">
                               {c.category ? c.category : '—'} · confidence {c.confidenceScore != null ? c.confidenceScore.toFixed(2) : '—'}
                             </div>
-                            {isDead((c as any).linkStatus) ? <div className="mt-2 text-xs text-amber-700">Link currently unavailable</div> : null}
+                            {/* Hard policy: dead links are denied upstream and never rendered here. */}
                           </div>
                         </div>
                       </li>

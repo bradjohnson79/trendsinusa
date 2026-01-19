@@ -138,16 +138,10 @@ export function PostPage() {
 
           <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
             <div className="text-xs font-medium text-slate-900">View on retailer site</div>
-            {!isDead((post as any).linkStatus) ? (
-              <a href={post.outboundUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-slate-700 hover:underline break-all">
-                {post.outboundUrl}
-              </a>
-            ) : (
-              <div className="mt-2 text-amber-700">
-                Link currently unavailable
-                <div className="mt-1 text-xs text-slate-600 break-all">{post.outboundUrl}</div>
-              </div>
-            )}
+            <a href={post.outboundUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-slate-700 hover:underline break-all">
+              {post.outboundUrl}
+            </a>
+            {/* Hard policy: dead links are denied upstream; expired posts remain accessible but should still have live outboundUrl at time of listing. */}
           </div>
         </article>
       )}

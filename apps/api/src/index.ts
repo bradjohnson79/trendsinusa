@@ -402,14 +402,17 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
   if (path === '/api/discovery') {
     if (method !== 'GET') return methodNotAllowed(res);
     const now = new Date();
+    // Live Deals rules (public):
+    // - Dead links are never rendered (hard denial)
+    // - Cap 10 per retailer (Amazon/Walmart/Target/BestBuy)
     const limitRaw = Number(url.searchParams.get('limit') ?? '60');
     const take = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, Math.trunc(limitRaw))) : 60;
 
     const rows = await prisma.discoveryCandidate
       .findMany({
-        where: { status: 'ACTIVE', discoveredAt: { lte: now } },
+        where: { status: 'ACTIVE', isFresh: true, linkStatus: 'ACTIVE' as any, discoveredAt: { lte: now } },
         orderBy: [{ confidenceScore: 'desc' }, { discoveredAt: 'desc' }, { id: 'asc' }],
-        take,
+        take: Math.max(take, 80),
         select: {
           id: true,
           title: true,
@@ -433,9 +436,25 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       })
       .catch(() => []);
 
+    const allowedRetailers = new Set(['AMAZON', 'WALMART', 'TARGET', 'BEST_BUY']);
+    const perRetailer: Record<string, any[]> = { AMAZON: [], WALMART: [], TARGET: [], BEST_BUY: [] };
+    for (const r of rows) {
+      if (!allowedRetailers.has(String(r.retailer))) continue;
+      const bucket = perRetailer[String(r.retailer)] ?? [];
+      if (bucket.length >= 10) continue;
+      bucket.push(r);
+      perRetailer[String(r.retailer)] = bucket;
+    }
+    const capped = [
+      ...(perRetailer.AMAZON ?? []),
+      ...(perRetailer.WALMART ?? []),
+      ...(perRetailer.TARGET ?? []),
+      ...(perRetailer.BEST_BUY ?? []),
+    ].slice(0, take);
+
     return json(res, 200, {
       now: now.toISOString(),
-      candidates: rows.map((r: any) => ({
+      candidates: capped.map((r: any) => ({
         id: r.id,
         title: r.title,
         retailer: r.retailer,
@@ -446,7 +465,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
         thumbnailUrl: r.thumbnailUrl ?? null,
         thumbnailGeneratedAt: r.thumbnailGeneratedAt ? r.thumbnailGeneratedAt.toISOString() : null,
         thumbnailSource: r.thumbnailSource ?? null,
-        linkStatus: r.linkStatus ?? 'UNKNOWN',
+        linkStatus: 'ACTIVE',
         lastCheckedAt: r.lastCheckedAt ? r.lastCheckedAt.toISOString() : null,
         imageQuery: r.imageQuery ?? null,
         outboundUrl: r.outboundUrl,

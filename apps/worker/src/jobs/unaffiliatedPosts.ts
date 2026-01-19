@@ -180,7 +180,13 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
         const c = p.discoveryCandidateId
           ? await prisma.discoveryCandidate.findUnique({ where: { id: p.discoveryCandidateId }, select: { confidenceScore: true } }).catch(() => null)
           : null;
-        const t = await generateThumbnailDataUrl({ title: p.title, category: p.category ?? null, confidenceScore: c?.confidenceScore ?? null });
+        const t = await generateThumbnailDataUrl({
+          title: p.title,
+          category: p.category ?? null,
+          shortDescription: p.shortDescription ?? null,
+          confidenceScore: c?.confidenceScore ?? null,
+          outboundUrl: p.outboundUrl,
+        });
         patch.thumbnailUrl = t.url;
         patch.thumbnailGeneratedAt = new Date();
         patch.thumbnailSource = t.source;
@@ -190,10 +196,16 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
         const c = p.discoveryCandidateId
           ? await prisma.discoveryCandidate.findUnique({ where: { id: p.discoveryCandidateId }, select: { confidenceScore: true } }).catch(() => null)
           : null;
-        const hero = await generateHeroImageDataUrl({ title: p.title, category: p.category ?? null, confidenceScore: c?.confidenceScore ?? null });
+        const hero = await generateHeroImageDataUrl({
+          title: p.title,
+          category: p.category ?? null,
+          shortDescription: p.shortDescription ?? null,
+          confidenceScore: c?.confidenceScore ?? null,
+          outboundUrl: p.outboundUrl,
+        });
         patch.heroImageUrl = hero.url;
         patch.heroImageGeneratedAt = new Date();
-        patch.heroImageSource = hero.source;
+        patch.heroImageSource = hero.source === 'real' ? 'procedural' : hero.source === 'generated' ? 'procedural' : 'placeholder';
         patch.heroImageInputHash = hero.inputHash;
       }
       if (!p.expiresAt) {
@@ -280,8 +292,14 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
       // Procedural-only thumbnail (150x150). Prefer cached, otherwise generate now.
       const thumb =
         c.thumbnailUrl != null
-          ? { url: c.thumbnailUrl, source: (c.thumbnailSource ?? 'procedural') as any, inputHash: (c as any).thumbnailInputHash ?? null }
-          : await generateThumbnailDataUrl({ title: c.title, category: c.category ?? null, confidenceScore: c.confidenceScore ?? null });
+          ? { url: c.thumbnailUrl, source: (c.thumbnailSource ?? 'generated') as any, inputHash: (c as any).thumbnailInputHash ?? null }
+          : await generateThumbnailDataUrl({
+              title: c.title,
+              category: c.category ?? null,
+              shortDescription: shortDescription ?? null,
+              confidenceScore: c.confidenceScore ?? null,
+              outboundUrl: c.outboundUrl,
+            });
 
       // Best-effort link verification (must not block publishing). Only check if never checked.
       const link =
@@ -304,7 +322,13 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
 
       const slug = await uniqueSlug(title);
 
-      const hero = await generateHeroImageDataUrl({ title, category: c.category ?? null, confidenceScore: c.confidenceScore ?? null });
+      const hero = await generateHeroImageDataUrl({
+        title,
+        category: c.category ?? null,
+        shortDescription: shortDescription ?? null,
+        confidenceScore: c.confidenceScore ?? null,
+        outboundUrl: c.outboundUrl,
+      });
 
       // Atomic, idempotent conversion:
       // - create image intent (non-blocking)
@@ -337,7 +361,7 @@ export async function runUnaffiliatedPostGeneration(params: { limit?: number } =
             thumbnailInputHash: (thumb as any).inputHash ?? null,
             heroImageUrl: hero.url,
             heroImageGeneratedAt: new Date(),
-            heroImageSource: hero.source,
+            heroImageSource: hero.source === 'real' ? 'procedural' : hero.source === 'generated' ? 'procedural' : 'placeholder',
             heroImageInputHash: hero.inputHash,
             linkStatus: link.status,
             lastCheckedAt: c.lastCheckedAt ?? new Date(),

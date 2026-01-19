@@ -3,9 +3,8 @@ import { getServerEnv } from '@trendsinusa/shared';
 import { getSiteByKey } from '@trendsinusa/shared/server';
 
 import { perplexityResearch } from '../ai/perplexity.js';
-import { generateShortDescription, generateThumbnailDataUrl, scoreConfidenceNano } from '../enrichment/postEnrichment.js';
+import { generateShortDescription, generateThumbnailDataUrl, scoreConfidenceNano, verifyOutboundLink } from '../enrichment/postEnrichment.js';
 import { ensurePostingItemForDiscovery } from '../posting/lifecycle.js';
-import { verifyOutboundLink } from '../enrichment/postEnrichment.js';
 import { getTodayUTC } from '../utils/time.js';
 
 const PROMPT_VERSION = 'discovery-sweep-v1';
@@ -210,7 +209,13 @@ Format: plain text list is fine.`;
       const categoryKey = c.category ?? 'General';
       const confidenceScore = (await scoreConfidenceNano({ title: c.title, category: categoryKey, retailer: String(retailer) })) ?? null;
       const shortDescription = await generateShortDescription({ title: c.title, category: categoryKey, retailer: String(retailer) });
-      const thumb = await generateThumbnailDataUrl({ title: c.title, category: categoryKey, confidenceScore });
+      const thumb = await generateThumbnailDataUrl({
+        title: c.title,
+        category: categoryKey,
+        shortDescription,
+        confidenceScore,
+        outboundUrl: c.outboundUrl,
+      });
 
       const fs = freshnessScoreFrom(spa);
 
@@ -308,8 +313,8 @@ Format: plain text list is fine.`;
 
   // 5) Best-effort enrichment (non-blocking callers; bounded work)
   // - shortDescription (1 sentence, max 20 words; gpt-4.1-nano)
-  // - thumbnailUrl (150x150; procedural SVG + Sharp)
-  // - linkStatus (HTTP + nano edge-case)
+  // - thumbnailUrl (real og:image if possible, otherwise product-specific generated; SVG→Sharp)
+  // - linkStatus (HTTP + nano edge-case) — DEAD => hard denial (REMOVED)
   const idsToEnrich = Array.from(new Set([...created, ...updated])).slice(0, 30);
   const backfill = await prisma.discoveryCandidate
     .findMany({
@@ -364,18 +369,30 @@ Format: plain text list is fine.`;
         if (ai) patch.shortDescription = ai;
       }
 
-      if (!row.thumbnailUrl) {
-        const t = await generateThumbnailDataUrl({ title: row.title, category: row.category ?? null, confidenceScore: row.confidenceScore ?? null });
+      const shouldVerify = row.lastCheckedAt == null || now.getTime() - new Date(row.lastCheckedAt).getTime() >= 2 * 60 * 60 * 1000;
+      if (shouldVerify) {
+        const r = await verifyOutboundLink(row.outboundUrl);
+        patch.linkStatus = r.status;
+        patch.lastCheckedAt = new Date();
+        if (!r.isActive) {
+          // HARD DENIAL: remove from live surfaces.
+          patch.status = 'REMOVED';
+          patch.expiresAt = new Date();
+        }
+      }
+
+      if (!patch.status && (!row.thumbnailUrl || !row.thumbnailInputHash)) {
+        const t = await generateThumbnailDataUrl({
+          title: row.title,
+          category: row.category ?? null,
+          shortDescription: row.shortDescription ?? row.description ?? null,
+          confidenceScore: row.confidenceScore ?? null,
+          outboundUrl: row.outboundUrl,
+        });
         patch.thumbnailUrl = t.url;
         patch.thumbnailGeneratedAt = new Date();
         patch.thumbnailSource = t.source;
         patch.thumbnailInputHash = t.inputHash;
-      }
-
-      if (row.linkStatus === 'UNKNOWN' && !row.lastCheckedAt) {
-        const r = await verifyOutboundLink(row.outboundUrl);
-        patch.linkStatus = r.status;
-        patch.lastCheckedAt = new Date();
       }
 
       if (Object.keys(patch).length) {

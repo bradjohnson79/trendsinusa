@@ -126,13 +126,10 @@ export function PostsPage() {
                       return <div className={cls}>{c.label}</div>;
                     })()}
                     <div className="mt-3 text-xs">
-                      {!isDead((p as any).linkStatus) ? (
-                        <a href={p.outboundUrl} target="_blank" rel="noreferrer" className="text-slate-600 hover:underline">
-                          View on retailer site
-                        </a>
-                      ) : (
-                        <span className="text-amber-700">Link currently unavailable</span>
-                      )}
+                      <a href={p.outboundUrl} target="_blank" rel="noreferrer" className="text-slate-600 hover:underline">
+                        View on retailer site
+                      </a>
+                      {/* Hard policy: dead links are denied upstream and never rendered in lists. */}
                     </div>
                   </div>
                 </div>
