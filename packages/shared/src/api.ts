@@ -86,6 +86,7 @@ export const DiscoveryCandidatePublicSchema = z.object({
   category: z.string().nullable(),
   description: z.string().nullable(),
   categoryPlaceholderUrl: z.string().optional(),
+  approvalStatus: z.enum(['PENDING', 'TEMP_APPROVED', 'APPROVED', 'DENIED']).optional(),
   shortDescription: z.string().nullable().optional(),
   thumbnailUrl: z.string().nullable().optional(),
   linkStatus: z.enum(['ACTIVE', 'DEAD', 'UNKNOWN']).optional(),

@@ -410,7 +410,13 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
 
     const rows = await prisma.discoveryCandidate
       .findMany({
-        where: { status: 'ACTIVE', isFresh: true, linkStatus: 'ACTIVE' as any, discoveredAt: { lte: now } },
+        where: {
+          status: 'ACTIVE',
+          isFresh: true,
+          linkStatus: 'ACTIVE' as any,
+          approvalStatus: { in: ['APPROVED', 'TEMP_APPROVED'] as any },
+          discoveredAt: { lte: now },
+        },
         orderBy: [{ confidenceScore: 'desc' }, { discoveredAt: 'desc' }, { id: 'asc' }],
         take: Math.max(take, 80),
         select: {
@@ -419,6 +425,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
           retailer: true,
           category: true,
           description: true,
+          approvalStatus: true,
           shortDescription: true,
           thumbnailUrl: true,
           thumbnailGeneratedAt: true,
@@ -461,6 +468,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
         category: r.category ?? null,
         description: r.description ?? null,
         categoryPlaceholderUrl: placeholderForCategory(r.category ?? null),
+        approvalStatus: r.approvalStatus ?? 'TEMP_APPROVED',
         shortDescription: r.shortDescription ?? null,
         thumbnailUrl: r.thumbnailUrl ?? null,
         thumbnailGeneratedAt: r.thumbnailGeneratedAt ? r.thumbnailGeneratedAt.toISOString() : null,

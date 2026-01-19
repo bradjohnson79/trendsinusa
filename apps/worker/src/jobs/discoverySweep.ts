@@ -203,6 +203,23 @@ Format: plain text list is fine.`;
       // Always verify link before storing. Fail-closed.
       const v = await verifyOutboundLink(c.outboundUrl);
       if (!v.isActive) {
+        // Hard denial: never eligible for rendering. Mark existing rows as DENIED/REMOVED for audit.
+        const key = normalizeTitleKey(c.title);
+        const existingId = existingByKey.get(key) ?? null;
+        if (existingId) {
+          await prisma.discoveryCandidate
+            .update({
+              where: { id: existingId },
+              data: {
+                approvalStatus: 'DENIED' as any,
+                status: 'REMOVED' as any,
+                linkStatus: v.status as any,
+                lastCheckedAt: now,
+                expiresAt: now,
+              },
+            })
+            .catch(() => null);
+        }
         continue;
       }
 
@@ -216,6 +233,7 @@ Format: plain text list is fine.`;
         confidenceScore,
         outboundUrl: c.outboundUrl,
       });
+      const approvalStatus = thumb.url ? ('APPROVED' as const) : ('TEMP_APPROVED' as const);
 
       const fs = freshnessScoreFrom(spa);
 
@@ -234,6 +252,7 @@ Format: plain text list is fine.`;
             sourcePublishedAt: spa,
             freshnessScore: fs,
             isFresh: true,
+            approvalStatus,
             shortDescription: shortDescription ?? null,
             thumbnailUrl: thumb.url,
             thumbnailGeneratedAt: now,
@@ -278,6 +297,7 @@ Format: plain text list is fine.`;
             sourcePublishedAt: spa,
             freshnessScore: fs,
             isFresh: true,
+            approvalStatus,
             shortDescription: shortDescription ?? null,
             thumbnailUrl: thumb.url,
             thumbnailGeneratedAt: now,
@@ -343,6 +363,7 @@ Format: plain text list is fine.`;
             description: true,
             outboundUrl: true,
             confidenceScore: true,
+            approvalStatus: true,
             shortDescription: true,
             thumbnailUrl: true,
             thumbnailInputHash: true,
@@ -376,12 +397,13 @@ Format: plain text list is fine.`;
         patch.lastCheckedAt = new Date();
         if (!r.isActive) {
           // HARD DENIAL: remove from live surfaces.
+          patch.approvalStatus = 'DENIED';
           patch.status = 'REMOVED';
           patch.expiresAt = new Date();
         }
       }
 
-      if (!patch.status && (!row.thumbnailUrl || !row.thumbnailInputHash)) {
+      if (!patch.status && (!row.thumbnailUrl || !row.thumbnailInputHash || row.approvalStatus === 'TEMP_APPROVED')) {
         const t = await generateThumbnailDataUrl({
           title: row.title,
           category: row.category ?? null,
@@ -393,6 +415,7 @@ Format: plain text list is fine.`;
         patch.thumbnailGeneratedAt = new Date();
         patch.thumbnailSource = t.source;
         patch.thumbnailInputHash = t.inputHash;
+        patch.approvalStatus = t.url ? 'APPROVED' : 'TEMP_APPROVED';
       }
 
       if (Object.keys(patch).length) {

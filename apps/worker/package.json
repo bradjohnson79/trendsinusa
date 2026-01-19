@@ -17,6 +17,7 @@
     "run:ai:hero-image": "dotenv -e ../../.env -- tsx src/scheduler/generateHeroImage.ts",
     "run:ai:category-images": "dotenv -e ../../.env -- tsx src/scheduler/generateCategoryImages.ts",
     "run:ai:product-enrichment": "dotenv -e ../../.env -- tsx src/scheduler/productEnrichment.ts",
+    "run:listing-image-retry": "dotenv -e ../../.env -- tsx src/scheduler/listingImageRetry.ts",
     "run:images:process-pending": "dotenv -e ../../.env -- tsx src/images/processPending.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint ."

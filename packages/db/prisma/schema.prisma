@@ -143,6 +143,13 @@ enum DiscoveryCandidateStatus {
   REMOVED
 }
 
+enum DiscoveryCandidateApprovalStatus {
+  PENDING
+  TEMP_APPROVED
+  APPROVED
+  DENIED
+}
+
 enum PostingLifecycleState {
   DISCOVERY
   INGESTED
@@ -723,6 +730,7 @@ model DiscoveryCandidate {
   imageQuery      String?
   outboundUrl     String
   confidenceScore Float?
+  approvalStatus  DiscoveryCandidateApprovalStatus @default(PENDING)
   shortDescription String?
   thumbnailUrl String?
   thumbnailGeneratedAt DateTime?
